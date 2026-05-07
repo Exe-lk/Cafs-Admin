@@ -1,26 +1,199 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --cafs-black: #000000;
+  --cafs-white: #ffffff;
+  --cafs-mint-accent: #64d6c7;
+  --cafs-dark-surface: #1a1a1a;
+  --cafs-dark-card: #242424;
+  --cafs-dark-border: #333333;
+  --cafs-primary-teal: #14b8a6;
+
+  /* Customer portal (MD3-style tokens from HTML reference). */
+  --cust-secondary-container: #e4e2e2;
+  --cust-tertiary-fixed: #cbede1;
+  --cust-primary-container: #b1f0ce;
+  --cust-on-error-container: #6e0a12;
+  --cust-surface-container-highest: #dfe3e4;
+  --cust-surface-container-high: #e6e9e9;
+  --cust-error-dim: #67040d;
+  --cust-tertiary-container: #cbede1;
+  --cust-on-error: #fff7f6;
+  --cust-surface-container-lowest: #ffffff;
+  --cust-surface-bright: #f9f9f9;
+  --cust-primary-fixed: #b1f0ce;
+  --cust-on-secondary-fixed: #3f3f3f;
+  --cust-on-secondary: #faf8f8;
+  --cust-on-primary-fixed-variant: #29664c;
+  --cust-error-container: #fa746f;
+  --cust-surface-tint: #2d6a4f;
+  --cust-surface: #0f1115;
+  --cust-outline: #777b7c;
+  --cust-on-tertiary-fixed: #29473e;
+  --cust-error: #a83836;
+  --cust-surface-variant: #dfe3e4;
+  --cust-secondary-fixed: #e4e2e2;
+  --cust-primary-dim: #1f5e44;
+  --cust-on-background: #f9f9f9;
+  --cust-secondary-fixed-dim: #d5d4d4;
+  --cust-primary-fixed-dim: #a3e2c0;
+  --cust-secondary-dim: #535353;
+  --cust-secondary: #5f5f5f;
+  --cust-on-tertiary-fixed-variant: #45635a;
+  --cust-inverse-surface: #0c0f0f;
+  --cust-inverse-primary: #beffdc;
+  --cust-on-surface: #f9f9f9;
+  --cust-outline-variant: #2a2e35;
+  --cust-inverse-on-surface: #9c9d9d;
+  --cust-tertiary-fixed-dim: #bdded3;
+  --cust-surface-container: #151821;
+  --cust-on-primary-container: #1d5c42;
+  --cust-on-secondary-fixed-variant: #5b5b5b;
+  --cust-tertiary-dim: #3b5950;
+  --cust-on-primary: #e6ffee;
+  --cust-on-secondary-container: #515252;
+  --cust-surface-container-low: #151821;
+  --cust-surface-dim: #0f1115;
+  --cust-on-surface-variant: #afb3b3;
+  --cust-on-tertiary: #e4fff5;
+  --cust-on-tertiary-container: #3b5950;
+  --cust-on-primary-fixed: #014931;
+  --cust-primary: #2d6a4f;
+  --cust-tertiary: #46655c;
+  --cust-background: #0f1115;
+
+  /* Therapist (management) theme tokens (scoped via .theraphist-theme). */
+  --thera-bg: #ffffff;
+  --thera-surface: #f6faf8;
+  --thera-sidebar: #f3f7f5;
+  --thera-border: #e6eeea;
+  --thera-text: #0f172a;
+  --thera-muted: #64748b;
+  --thera-accent: #1f6b4e;
+  --thera-accent-soft: #bfeedd;
+  --thera-accent-strong: #0b5a3d;
+
+  /* Therapist MD3-style tokens (aligned with management HTML reference). */
+  --mgmt-background: #f9f9f9;
+  --mgmt-on-background: #2f3334;
+  --mgmt-surface: #f9f9f9;
+  --mgmt-on-surface: #2f3334;
+  --mgmt-on-surface-variant: #5b6061;
+  --mgmt-primary: #2d6a4f;
+  --mgmt-on-primary: #e6ffee;
+  --mgmt-primary-dim: #1f5e44;
+  --mgmt-primary-container: #b1f0ce;
+  --mgmt-on-primary-container: #1d5c42;
+  --mgmt-tertiary-container: #cbede1;
+  --mgmt-on-tertiary-container: #3b5950;
+  --mgmt-tertiary-fixed-dim: #bdded3;
+  --mgmt-tertiary-dim: #3b5950;
+  --mgmt-surface-container-low: #f2f4f4;
+  --mgmt-surface-container-lowest: #ffffff;
+  --mgmt-surface-container: #eceeef;
+  --mgmt-surface-container-high: #e6e9e9;
+  --mgmt-outline-variant: #afb3b3;
 }
+
+
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --font-sans: var(--font-inter);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-cafs-black: var(--cafs-black);
+  --color-cafs-white: var(--cafs-white);
+  --color-mint-accent: var(--cafs-mint-accent);
+  --color-dark-surface: var(--cafs-dark-surface);
+  --color-dark-card: var(--cafs-dark-card);
+  --color-dark-border: var(--cafs-dark-border);
+  --color-primary-teal: var(--cafs-primary-teal);
+
+  /* Customer portal palette (use with `bg-background`, `text-on-surface`, etc.). */
+  --color-background: var(--cust-background);
+  --color-on-background: var(--cust-on-background);
+  --color-surface: var(--cust-surface);
+  --color-on-surface: var(--cust-on-surface);
+  --color-on-surface-variant: var(--cust-on-surface-variant);
+  --color-surface-container-low: var(--cust-surface-container-low);
+  --color-surface-container: var(--cust-surface-container);
+  --color-surface-container-high: var(--cust-surface-container-high);
+  --color-surface-container-highest: var(--cust-surface-container-highest);
+  --color-outline-variant: var(--cust-outline-variant);
+  --color-primary: var(--cust-primary);
+  --color-primary-dim: var(--cust-primary-dim);
+  --color-on-primary: var(--cust-on-primary);
+  --color-primary-container: var(--cust-primary-container);
+  --color-on-primary-container: var(--cust-on-primary-container);
+  --color-tertiary-container: var(--cust-tertiary-container);
+  --color-tertiary: var(--cust-tertiary);
+  --color-secondary: var(--cust-secondary);
+
+  /* Therapist palette (use with `thera-*` tailwind color names). */
+  --color-thera-bg: var(--thera-bg);
+  --color-thera-surface: var(--thera-surface);
+  --color-thera-sidebar: var(--thera-sidebar);
+  --color-thera-border: var(--thera-border);
+  --color-thera-text: var(--thera-text);
+  --color-thera-muted: var(--thera-muted);
+  --color-thera-accent: var(--thera-accent);
+  --color-thera-accent-soft: var(--thera-accent-soft);
+  --color-thera-accent-strong: var(--thera-accent-strong);
+
+  --color-mgmt-background: var(--mgmt-background);
+  --color-mgmt-on-background: var(--mgmt-on-background);
+  --color-mgmt-surface: var(--mgmt-surface);
+  --color-mgmt-on-surface: var(--mgmt-on-surface);
+  --color-mgmt-on-surface-variant: var(--mgmt-on-surface-variant);
+  --color-mgmt-primary: var(--mgmt-primary);
+  --color-mgmt-on-primary: var(--mgmt-on-primary);
+  --color-mgmt-primary-dim: var(--mgmt-primary-dim);
+  --color-mgmt-primary-container: var(--mgmt-primary-container);
+  --color-mgmt-on-primary-container: var(--mgmt-on-primary-container);
+  --color-mgmt-tertiary-container: var(--mgmt-tertiary-container);
+  --color-mgmt-on-tertiary-container: var(--mgmt-on-tertiary-container);
+  --color-mgmt-tertiary-fixed-dim: var(--mgmt-tertiary-fixed-dim);
+  --color-mgmt-tertiary-dim: var(--mgmt-tertiary-dim);
+  --color-mgmt-surface-container-low: var(--mgmt-surface-container-low);
+  --color-mgmt-surface-container-lowest: var(--mgmt-surface-container-lowest);
+  --color-mgmt-surface-container: var(--mgmt-surface-container);
+  --color-mgmt-surface-container-high: var(--mgmt-surface-container-high);
+  --color-mgmt-outline-variant: var(--mgmt-outline-variant);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--cafs-black);
+  color: var(--cafs-white);
+}
+
+.customer-theme {
+  background: var(--cust-background);
+  color: var(--cust-on-background);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+.customer-theme .material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+.theraphist-theme {
+  background: var(--mgmt-background);
+  color: var(--mgmt-on-surface);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+.theraphist-theme .material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+.theraphist-theme ::-webkit-scrollbar {
+  width: 6px;
+}
+
+.theraphist-theme ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.theraphist-theme ::-webkit-scrollbar-thumb {
+  background: var(--mgmt-outline-variant);
+  border-radius: 10px;
 }
