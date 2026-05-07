@@ -1,0 +1,461 @@
+// Booking / therapy clinic schema — maps to PostgreSQL tables (snake_case via @map)
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  admin
+  therapist
+  front_office
+  client
+}
+
+enum TherapistVisibility {
+  public
+  private
+}
+
+enum ServiceVisibility {
+  public
+  private
+}
+
+enum AppointmentType {
+  online
+  in_person
+}
+
+enum AppointmentStatus {
+  pending_payment
+  pending_confirmation
+  confirmed
+  cancelled
+  completed
+  no_show
+  expired
+}
+
+enum PaymentMethod {
+  gateway
+  bank_transfer
+  cash
+}
+
+enum PaymentStatus {
+  pending
+  authorized
+  paid
+  failed
+  cancelled
+  refunded
+}
+
+enum NotificationChannel {
+  email
+  sms
+}
+
+enum NotificationType {
+  booking_confirmation
+  appointment_reminder
+  payment_confirmation
+  payment_receipt
+  payment_reminder
+  cancellation
+  reschedule
+}
+
+enum NotificationStatus {
+  queued
+  sent
+  failed
+}
+
+/// One row per authenticated user (`user_id` = `auth.users.id` in Supabase).
+model Profile {
+  userId   String   @id @map("user_id") @db.Uuid
+  role     UserRole
+  fullName String   @map("full_name")
+  email    String?
+  phone    String?
+  isActive Boolean  @default(true) @map("is_active")
+  createdAt DateTime @map("created_at")
+  updatedAt DateTime @map("updated_at")
+
+  therapist Therapist?
+  clientProfile ClientProfile?
+
+  policyAcceptances PolicyAcceptance[]
+
+  timeBlocksCreated TherapistTimeBlock[] @relation("TimeBlockCreator")
+
+  recurringSeriesCreated RecurringSeries[] @relation("RecurringSeriesCreator")
+  recurringSeriesAsClient RecurringSeries[] @relation("RecurringSeriesClient")
+
+  appointmentsAsClient Appointment[] @relation("AppointmentClient")
+  appointmentsCreated  Appointment[] @relation("AppointmentCreator")
+
+  paymentsConfirmed Payment[] @relation("PaymentConfirmer")
+
+  notifications NotificationOutbox[]
+
+  auditLogsAsActor AuditLog[] @relation("AuditLogActor")
+
+  oauthAccounts OAuthAccount[]
+
+  @@map("profiles")
+}
+
+/// `therapist_id` matches `profiles.user_id` for therapist users.
+model Therapist {
+  therapistId           String              @id @map("therapist_id") @db.Uuid
+  visibility            TherapistVisibility @default(public)
+  title                 String?
+  bio                   String?
+  languages             String?
+  specialties           String?
+  profilePhotoUrl       String?             @map("profile_photo_url")
+  timezone              String              @default("Asia/Colombo")
+  isAcceptingNewClients Boolean             @default(true) @map("is_accepting_new_clients")
+  updatedAt             DateTime            @map("updated_at")
+
+  profile Profile @relation(fields: [therapistId], references: [userId])
+
+  therapistServices TherapistService[]
+  workingHours      TherapistWorkingHours[]
+  timeBlocks        TherapistTimeBlock[]
+  recurringSeries   RecurringSeries[]
+  appointments      Appointment[]
+
+  @@map("therapists")
+}
+
+/// `client_id` matches `profiles.user_id` for client users.
+model ClientProfile {
+  clientId              String    @id @map("client_id") @db.Uuid
+  dateOfBirth           DateTime? @map("date_of_birth") @db.Date
+  gender                String?
+  address               String?
+  emergencyContactName  String?   @map("emergency_contact_name")
+  emergencyContactPhone String?   @map("emergency_contact_phone")
+  createdAt             DateTime  @map("created_at")
+  updatedAt             DateTime  @map("updated_at")
+
+  profile Profile @relation(fields: [clientId], references: [userId])
+
+  @@map("client_profiles")
+}
+
+model Room {
+  roomId   String   @id @map("room_id") @db.Uuid
+  roomName String   @unique @map("room_name")
+  isActive Boolean  @default(true) @map("is_active")
+  createdAt DateTime @map("created_at")
+
+  appointments Appointment[]
+
+  @@map("rooms")
+}
+
+model Service {
+  serviceId               String            @id @map("service_id") @db.Uuid
+  name                    String
+  description             String?
+  visibility              ServiceVisibility @default(public)
+  defaultDurationMinutes  Int               @default(60) @map("default_duration_minutes")
+  basePriceLkr            Decimal?          @map("base_price_lkr") @db.Decimal(12, 2)
+  currency                String            @default("LKR")
+  allowedAppointmentType  AppointmentType?  @map("allowed_appointment_type")
+  isActive                Boolean           @default(true) @map("is_active")
+  createdAt               DateTime          @map("created_at")
+  updatedAt               DateTime          @map("updated_at")
+
+  therapistServices TherapistService[]
+  recurringSeries   RecurringSeries[]
+  appointments      Appointment[]
+
+  @@map("services")
+}
+
+model TherapistService {
+  therapistServiceId String   @id @map("therapist_service_id") @db.Uuid
+  therapistId        String   @map("therapist_id") @db.Uuid
+  serviceId          String   @map("service_id") @db.Uuid
+  priceLkr           Decimal? @map("price_lkr") @db.Decimal(12, 2)
+  durationMinutes    Int?     @map("duration_minutes")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @map("created_at")
+
+  therapist Therapist @relation(fields: [therapistId], references: [therapistId])
+  service   Service   @relation(fields: [serviceId], references: [serviceId])
+
+  @@unique([therapistId, serviceId])
+  @@map("therapist_services")
+}
+
+model BookingPolicy {
+  policyId  String   @id @map("policy_id") @db.Uuid
+  title     String
+  content   String
+  version   String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @map("created_at")
+
+  acceptances PolicyAcceptance[]
+
+  @@map("booking_policies")
+}
+
+model PolicyAcceptance {
+  acceptanceId String   @id @map("acceptance_id") @db.Uuid
+  policyId     String   @map("policy_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  acceptedAt   DateTime @map("accepted_at")
+
+  policy BookingPolicy @relation(fields: [policyId], references: [policyId])
+  user   Profile       @relation(fields: [userId], references: [userId])
+
+  @@unique([policyId, userId])
+  @@map("policy_acceptances")
+}
+
+/// Weekly recurring availability template.
+model TherapistWorkingHours {
+  workingHoursId String   @id @map("working_hours_id") @db.Uuid
+  therapistId    String   @map("therapist_id") @db.Uuid
+  dayOfWeek      Int      @map("day_of_week")
+  startTime      DateTime @map("start_time") @db.Time(6)
+  endTime        DateTime @map("end_time") @db.Time(6)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @map("created_at")
+
+  therapist Therapist @relation(fields: [therapistId], references: [therapistId])
+
+  @@map("therapist_working_hours")
+}
+
+/// Breaks / leave / blocked time; visibility flag controls client-facing behavior.
+model TherapistTimeBlock {
+  timeBlockId        String   @id @map("time_block_id") @db.Uuid
+  therapistId        String   @map("therapist_id") @db.Uuid
+  startAt            DateTime @map("start_at")
+  endAt              DateTime @map("end_at")
+  reason             String?
+  isVisibleToClient Boolean  @default(false) @map("is_visible_to_client")
+  createdBy          String?  @map("created_by") @db.Uuid
+  createdAt          DateTime @map("created_at")
+
+  therapist Therapist @relation(fields: [therapistId], references: [therapistId])
+  creator   Profile?  @relation("TimeBlockCreator", fields: [createdBy], references: [userId])
+
+  @@map("therapist_time_blocks")
+}
+
+/// Recurring bookings; `rrule_text` stores RRULE or JSON.
+model RecurringSeries {
+  seriesId         String          @id @map("series_id") @db.Uuid
+  createdBy        String          @map("created_by") @db.Uuid
+  clientId         String          @map("client_id") @db.Uuid
+  therapistId      String          @map("therapist_id") @db.Uuid
+  serviceId        String          @map("service_id") @db.Uuid
+  appointmentType  AppointmentType @map("appointment_type")
+  rruleText        String          @map("rrule_text")
+  /// First occurrence start.
+  startAt          DateTime        @map("start_at")
+  durationMinutes  Int             @default(60) @map("duration_minutes")
+  isActive         Boolean         @default(true) @map("is_active")
+  createdAt        DateTime        @map("created_at")
+
+  creator   Profile   @relation("RecurringSeriesCreator", fields: [createdBy], references: [userId])
+  client    Profile   @relation("RecurringSeriesClient", fields: [clientId], references: [userId])
+  therapist Therapist @relation(fields: [therapistId], references: [therapistId])
+  service   Service   @relation(fields: [serviceId], references: [serviceId])
+
+  appointments Appointment[]
+
+  @@map("recurring_series")
+}
+
+/// Double-booking prevention is enforced with DB constraints / exclusion indexes (outside Prisma).
+model Appointment {
+  appointmentId         String            @id @map("appointment_id") @db.Uuid
+  clientId              String            @map("client_id") @db.Uuid
+  therapistId           String            @map("therapist_id") @db.Uuid
+  serviceId             String            @map("service_id") @db.Uuid
+  appointmentType       AppointmentType   @map("appointment_type")
+  status                AppointmentStatus @default(pending_payment)
+  startAt               DateTime          @map("start_at")
+  endAt                 DateTime          @map("end_at")
+  roomId                 String?          @map("room_id") @db.Uuid
+  meetLink              String?           @map("meet_link")
+  googleCalendarEventId String?           @map("google_calendar_event_id")
+  paymentDueAt          DateTime?         @map("payment_due_at")
+  confirmedAt           DateTime?         @map("confirmed_at")
+  cancelledAt           DateTime?         @map("cancelled_at")
+  cancelReason          String?           @map("cancel_reason")
+  seriesId              String?           @map("series_id") @db.Uuid
+  createdBy             String            @map("created_by") @db.Uuid
+  createdAt             DateTime          @map("created_at")
+  updatedAt             DateTime          @map("updated_at")
+
+  client    Profile          @relation("AppointmentClient", fields: [clientId], references: [userId])
+  therapist Therapist        @relation(fields: [therapistId], references: [therapistId])
+  service   Service          @relation(fields: [serviceId], references: [serviceId])
+  room      Room?            @relation(fields: [roomId], references: [roomId])
+  series    RecurringSeries? @relation(fields: [seriesId], references: [seriesId])
+  creator   Profile          @relation("AppointmentCreator", fields: [createdBy], references: [userId])
+
+  payment           Payment?
+  notificationOutbox NotificationOutbox[]
+
+  @@index([therapistId, startAt])
+  @@index([clientId, startAt])
+  @@index([roomId, startAt])
+  @@index([seriesId])
+  @@map("appointments")
+}
+
+model Payment {
+  paymentId           String         @id @map("payment_id") @db.Uuid
+  appointmentId       String         @unique @map("appointment_id") @db.Uuid
+  method              PaymentMethod
+  status              PaymentStatus  @default(pending)
+  amount              Decimal        @db.Decimal(12, 2)
+  currency            String         @default("LKR")
+  provider            String?
+  providerPaymentRef String?        @map("provider_payment_ref")
+  providerPayload     String?        @map("provider_payload")
+  dueAt               DateTime?      @map("due_at")
+  paidAt              DateTime?      @map("paid_at")
+  confirmedBy         String?        @map("confirmed_by") @db.Uuid
+  confirmedAt         DateTime?      @map("confirmed_at")
+  confirmationNote    String?      @map("confirmation_note")
+  createdAt           DateTime       @map("created_at")
+  updatedAt           DateTime       @map("updated_at")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [appointmentId])
+  confirmer   Profile?    @relation("PaymentConfirmer", fields: [confirmedBy], references: [userId])
+
+  @@index([status])
+  @@index([providerPaymentRef])
+  @@map("payments")
+}
+
+model NotificationOutbox {
+  notificationId    String              @id @map("notification_id") @db.Uuid
+  userId            String              @map("user_id") @db.Uuid
+  appointmentId     String?             @map("appointment_id") @db.Uuid
+  channel           NotificationChannel
+  /// DB column `type` — notification template kind.
+  notificationType  NotificationType    @map("type")
+  status            NotificationStatus  @default(queued)
+  /// Email address or phone number.
+  toAddress         String              @map("to_address")
+  subject           String?
+  body              String
+  provider          String?
+  providerMessageId String?             @map("provider_message_id")
+  lastError         String?             @map("last_error")
+  scheduledFor      DateTime?           @map("scheduled_for")
+  sentAt            DateTime?           @map("sent_at")
+  createdAt         DateTime            @map("created_at")
+
+  user        Profile      @relation(fields: [userId], references: [userId])
+  appointment Appointment? @relation(fields: [appointmentId], references: [appointmentId])
+
+  @@index([status, scheduledFor])
+  @@index([appointmentId])
+  @@index([userId])
+  @@map("notification_outbox")
+}
+
+model AuditLog {
+  auditId       String   @id @map("audit_id") @db.Uuid
+  actorUserId   String?  @map("actor_user_id") @db.Uuid
+  action        String
+  entity        String
+  entityId      String?  @map("entity_id") @db.Uuid
+  metadataJson  String?  @map("metadata_json")
+  createdAt     DateTime @map("created_at")
+
+  actor Profile? @relation("AuditLogActor", fields: [actorUserId], references: [userId])
+
+  @@index([entity, entityId])
+  @@index([actorUserId, createdAt])
+  @@map("audit_log")
+}
+
+enum OAuthProvider {
+  google
+}
+
+/// Stores OAuth tokens for external integrations (e.g. Google Calendar) for server-side use.
+/// This is separate from Supabase Auth login.
+model OAuthAccount {
+  oauthAccountId String       @id @map("oauth_account_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  provider       OAuthProvider
+  providerUserId String?      @map("provider_user_id")
+  scopesCsv      String?      @map("scopes_csv")
+  accessToken    String?      @map("access_token")
+  refreshToken   String       @map("refresh_token")
+  tokenType      String?      @map("token_type")
+  expiresAt      DateTime?    @map("expires_at")
+  createdAt      DateTime     @map("created_at")
+  updatedAt      DateTime     @map("updated_at")
+
+  user Profile @relation(fields: [userId], references: [userId])
+
+  @@unique([userId, provider])
+  @@index([provider, providerUserId])
+  @@map("oauth_accounts")
+}
+
+model Class {
+  classId     String   @id @map("class_id") @db.Uuid
+  therapistId String?  @map("therapist_id") @db.Uuid
+  title       String
+  description String?
+  startAt     DateTime @map("start_at")
+  endAt       DateTime @map("end_at")
+  capacity    Int?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @map("created_at")
+  updatedAt   DateTime @map("updated_at")
+
+  @@index([therapistId, startAt])
+  @@map("classes")
+}
+
+model MessageThread {
+  threadId   String   @id @map("thread_id") @db.Uuid
+  title      String?
+  createdBy  String?  @map("created_by") @db.Uuid
+  createdAt  DateTime @map("created_at")
+  updatedAt  DateTime @map("updated_at")
+
+  messages Message[]
+
+  @@index([createdAt])
+  @@map("message_threads")
+}
+
+model Message {
+  messageId String   @id @map("message_id") @db.Uuid
+  threadId  String   @map("thread_id") @db.Uuid
+  senderId  String?  @map("sender_id") @db.Uuid
+  body      String
+  createdAt DateTime @map("created_at")
+
+  thread MessageThread @relation(fields: [threadId], references: [threadId])
+
+  @@index([threadId, createdAt])
+  @@map("messages")
+}

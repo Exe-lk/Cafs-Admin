@@ -1,0 +1,554 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import CreateAppointmentModal from "@/components/admin/CreateAppointmentModal";
+import EditAppointmentModal, { type AdminEditableAppointment } from "@/components/admin/EditAppointmentModal";
+
+const TIME_LABELS = Array.from({ length: 24 }, (_, i) => {
+  if (i === 0) return "12 AM";
+  if (i < 12) return `${i} AM`;
+  if (i === 12) return "12 PM";
+  return `${i - 12} PM`;
+});
+
+type CalendarView = "day" | "week" | "month";
+
+type CalEvent = {
+  id: string;
+  start: Date;
+  end?: Date;
+  title: string;
+  subtitle: string;
+  variant: "therapy" | "neutral";
+  durationMin?: number;
+  proofUrl?: string;
+  approvalStatus?: "pending" | "accepted" | "rejected";
+};
+
+type ApiEnvelope<T> = {
+  status: "success" | "error";
+  code: number;
+  message: string;
+  timestamp: string;
+  data: T | null;
+  errors?: Array<{ field: string; message: string }>;
+};
+
+function startOfWeekMonday(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(12, 0, 0, 0);
+  const day = x.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  x.setDate(x.getDate() + diff);
+  return x;
+}
+
+function addDays(d: Date, n: number): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function formatWeekHeader(weekStart: Date): string {
+  const weekEnd = addDays(weekStart, 6);
+  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short" });
+  const yEnd = weekEnd.getFullYear();
+  if (weekStart.getMonth() === weekEnd.getMonth()) {
+    return `${fmt(weekStart)} ${yEnd}`;
+  }
+  const yStart = weekStart.getFullYear();
+  if (yStart !== yEnd) {
+    return `${fmt(weekStart)} ${yStart} - ${fmt(weekEnd)} ${yEnd}`;
+  }
+  return `${fmt(weekStart)} - ${fmt(weekEnd)} ${yEnd}`;
+}
+
+function rangeForView(view: CalendarView, anchor: Date, weekStart: Date) {
+  if (view === "day") {
+    const from = new Date(anchor);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(from);
+    to.setDate(to.getDate() + 1);
+    return { from, to };
+  }
+  if (view === "week") {
+    const from = new Date(weekStart);
+    from.setHours(0, 0, 0, 0);
+    const to = addDays(from, 7);
+    return { from, to };
+  }
+  // Month view currently doesn't render time grid; keep a safe default.
+  const from = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const to = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1);
+  return { from, to };
+}
+
+function titleForAppointmentType(t: string | null) {
+  if (t === "in_person") return "In-person appointment";
+  if (t === "online") return "Online appointment";
+  return "Appointment";
+}
+
+export default function AdminCalendarHome({ therapistId }: { therapistId?: string }) {
+  const [view, setView] = useState<CalendarView>("week");
+  const [anchor, setAnchor] = useState(() => new Date());
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [selected, setSelected] = useState<AdminEditableAppointment | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const weekStart = useMemo(() => startOfWeekMonday(anchor), [anchor]);
+
+  const headerTitle = useMemo(() => {
+    if (view === "day") {
+      return anchor.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    }
+    if (view === "month") {
+      return anchor.toLocaleDateString("en-US", {
+        month: "long",
+        year: "numeric",
+      });
+    }
+    return formatWeekHeader(weekStart);
+  }, [anchor, view, weekStart]);
+
+  const dayColumns = useMemo(() => {
+    if (view === "day") return [anchor];
+    if (view === "week") return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    return [];
+  }, [anchor, view, weekStart]);
+
+  const [events, setEvents] = useState<CalEvent[]>([]);
+
+  useEffect(() => {
+    if (!therapistId) {
+      setEvents([]);
+      setLoading(false);
+      setErrorMsg(null);
+      return;
+    }
+
+    const { from, to } = rangeForView(view, anchor, weekStart);
+    const sp = new URLSearchParams();
+    sp.set("from", from.toISOString());
+    sp.set("to", to.toISOString());
+    sp.set("therapistId", therapistId);
+
+    const ac = new AbortController();
+    setLoading(true);
+    setErrorMsg(null);
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/admin/calendar?${sp.toString()}`, {
+          method: "GET",
+          cache: "no-store",
+          signal: ac.signal,
+        });
+        const json = (await res.json()) as ApiEnvelope<{
+          items: Array<{
+            therapistId: string;
+            type: "appointment";
+            appointmentId: string;
+            startAt: string;
+            endAt: string;
+            appointmentType: "online" | "in_person";
+            status: string;
+          }>;
+        }>;
+
+        if (!res.ok || json.status !== "success" || !json.data) {
+          throw new Error(json.message || `Failed to load calendar (HTTP ${res.status})`);
+        }
+
+        const nextEvents: CalEvent[] = json.data.items.map((it) => {
+          const start = new Date(it.startAt);
+          const end = new Date(it.endAt);
+          return {
+            id: it.appointmentId,
+            start,
+            end,
+            title: titleForAppointmentType(it.appointmentType),
+            subtitle: it.status,
+            variant: "therapy",
+          };
+        });
+
+        setEvents(nextEvents);
+      } catch (e) {
+        if ((e as any)?.name === "AbortError") return;
+        setErrorMsg(e instanceof Error ? e.message : "Failed to load calendar");
+        setEvents([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+
+    return () => ac.abort();
+  }, [anchor, therapistId, view, weekStart, reloadKey]);
+
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+
+  function onToday() {
+    setAnchor(new Date());
+  }
+
+  function onPrev() {
+    if (view === "week") setAnchor(addDays(anchor, -7));
+    else if (view === "day") setAnchor(addDays(anchor, -1));
+    else {
+      const x = new Date(anchor);
+      x.setMonth(x.getMonth() - 1);
+      setAnchor(x);
+    }
+  }
+
+  function onNext() {
+    if (view === "week") setAnchor(addDays(anchor, 7));
+    else if (view === "day") setAnchor(addDays(anchor, 1));
+    else {
+      const x = new Date(anchor);
+      x.setMonth(x.getMonth() + 1);
+      setAnchor(x);
+    }
+  }
+
+  const gridColsClass = view === "day" ? "grid-cols-[80px_1fr]" : "grid-cols-[80px_repeat(7,1fr)]";
+
+  return (
+    <main className="flex min-h-0 flex-1 overflow-hidden">
+      <CreateAppointmentModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        therapistId={therapistId}
+        onCreated={() => {
+          setReloadKey((k) => k + 1);
+        }}
+      />
+      {editOpen && selected ? (
+        <EditAppointmentModal
+          appointment={selected}
+          onClose={() => setEditOpen(false)}
+          onDelete={({ sessionId }) => {
+            setEvents((prev) => prev.filter((e) => e.id !== sessionId));
+            setReloadKey((k) => k + 1);
+          }}
+          onSave={(next) => {
+            setSelected(next);
+            setEvents((prev) =>
+              prev.map((e) =>
+                e.id === next.sessionId
+                  ? {
+                      ...e,
+                      title: next.title,
+                      subtitle: next.providerName,
+                      proofUrl: next.proofUrl,
+                      approvalStatus: next.approvalStatus,
+                    }
+                  : e,
+              ),
+            );
+            setReloadKey((k) => k + 1);
+          }}
+        />
+      ) : null}
+
+      <section className="flex h-full min-h-0 flex-1 flex-col bg-mgmt-surface-container-lowest">
+        <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between border-b border-mgmt-outline-variant/10 bg-white/80 px-8 backdrop-blur-xl">
+          <div className="flex items-center gap-6">
+            <h2 className="text-xl font-bold text-mgmt-on-surface">{headerTitle}</h2>
+            <div className="flex items-center rounded-lg bg-mgmt-surface-container-low p-1">
+              <button
+                type="button"
+                onClick={onToday}
+                className="rounded bg-white px-4 py-1.5 text-sm font-semibold text-mgmt-primary shadow-sm"
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={onPrev}
+                className="p-1.5 text-mgmt-on-surface-variant hover:text-mgmt-on-surface"
+                aria-label="Previous"
+              >
+                <MaterialSymbol name="chevron_left" />
+              </button>
+              <button
+                type="button"
+                onClick={onNext}
+                className="p-1.5 text-mgmt-on-surface-variant hover:text-mgmt-on-surface"
+                aria-label="Next"
+              >
+                <MaterialSymbol name="chevron_right" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex items-center rounded-lg bg-mgmt-surface-container-low p-1">
+              <button
+                type="button"
+                onClick={() => setView("day")}
+                className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${
+                  view === "day" ? "rounded bg-white text-mgmt-primary shadow-sm" : "text-mgmt-on-surface-variant"
+                }`}
+              >
+                Day
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("week")}
+                className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${
+                  view === "week" ? "rounded bg-white text-mgmt-primary shadow-sm" : "text-mgmt-on-surface-variant"
+                }`}
+              >
+                Week
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("month")}
+                className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${
+                  view === "month" ? "rounded bg-white text-mgmt-primary shadow-sm" : "text-mgmt-on-surface-variant"
+                }`}
+              >
+                Month
+              </button>
+            </div>
+
+            <div className="mx-2 h-6 w-px bg-mgmt-outline-variant/20" />
+
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-br from-mgmt-primary to-mgmt-primary-dim px-5 py-2.5 text-sm font-semibold text-mgmt-on-primary shadow-md transition-all active:scale-95"
+            >
+              <MaterialSymbol name="add" className="text-lg" />
+              Create Appointment
+            </button>
+          </div>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-auto bg-mgmt-surface">
+          {errorMsg ? (
+            <div className="border-b border-mgmt-outline-variant/10 bg-red-50 px-6 py-3 text-sm text-red-700">
+              {errorMsg}
+            </div>
+          ) : null}
+          {loading ? (
+            <div className="border-b border-mgmt-outline-variant/10 bg-white/60 px-6 py-3 text-sm text-mgmt-on-surface-variant">
+              Loading…
+            </div>
+          ) : null}
+          {view === "month" ? (
+            <MonthGrid
+              anchor={anchor}
+              today={today}
+              onSelectDay={(d) => {
+                setAnchor(d);
+                setView("day");
+              }}
+            />
+          ) : (
+            <div className={`grid min-h-full min-w-[800px] ${gridColsClass}`}>
+              <div className="sticky top-0 z-20 border-b border-mgmt-outline-variant/10 bg-mgmt-surface" />
+              {dayColumns.map((colDate) => {
+                const isToday = sameDay(colDate, today);
+                const dow = colDate.toLocaleDateString("en-US", { weekday: "short" });
+                const dom = colDate.getDate();
+                return (
+                  <div
+                    key={colDate.toISOString()}
+                    className="sticky top-0 z-20 border-b border-mgmt-outline-variant/10 bg-mgmt-surface py-4 text-center"
+                  >
+                    <span
+                      className={`block text-xs font-bold uppercase tracking-widest ${
+                        isToday ? "text-mgmt-primary" : "text-mgmt-on-surface-variant"
+                      }`}
+                    >
+                      {dow}
+                    </span>
+                    {isToday ? (
+                      <div className="mx-auto mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-mgmt-primary text-2xl font-bold text-mgmt-on-primary">
+                        {dom}
+                      </div>
+                    ) : (
+                      <span className="mt-1 block text-2xl font-bold text-mgmt-on-surface">{dom}</span>
+                    )}
+                  </div>
+                );
+              })}
+
+              {TIME_LABELS.map((timeLabel, hour) => (
+                <TimeRow
+                  key={timeLabel}
+                  timeLabel={timeLabel}
+                  hour={hour}
+                  dayColumns={dayColumns}
+                  events={events}
+                  onSelectEvent={(ev) => {
+                    const dateLine = ev.start
+                      .toLocaleDateString("en-US", { day: "2-digit", month: "short" })
+                      .toUpperCase();
+                    const dow = ev.start.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+                    const fmtTime = (d: Date) =>
+                      d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(" ", "");
+                    const end = ev.end ?? new Date(ev.start.getTime() + (ev.durationMin ?? 60) * 60000);
+                    const timeRange = `${fmtTime(ev.start)} – ${fmtTime(end)}`;
+
+                    setSelected({
+                      dayId: weekStart.toISOString(),
+                      sessionId: ev.id,
+                      dateLine: `${dateLine}, ${dow}`,
+                      timeRange,
+                      title: ev.title,
+                      providerName: ev.subtitle,
+                      notes: "",
+                      videoLink: "",
+                      proofUrl: ev.proofUrl,
+                      approvalStatus: ev.approvalStatus ?? "pending",
+                      startAt: ev.start.toISOString(),
+                      endAt: end.toISOString(),
+                    });
+                    setEditOpen(true);
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function TimeRow({
+  timeLabel,
+  hour,
+  dayColumns,
+  events,
+  onSelectEvent,
+}: {
+  timeLabel: string;
+  hour: number;
+  dayColumns: Date[];
+  events: CalEvent[];
+  onSelectEvent: (ev: CalEvent) => void;
+}) {
+  return (
+    <>
+      <div className="border-b border-r border-mgmt-outline-variant/5 bg-mgmt-surface py-4 pr-4 text-right text-[0.65rem] font-bold uppercase tracking-tighter text-mgmt-on-surface-variant">
+        {timeLabel}
+      </div>
+      {dayColumns.map((colDate) => {
+        const cellEvents = events.filter((ev) => sameDay(ev.start, colDate) && ev.start.getHours() === hour);
+        return (
+          <div
+            key={`${colDate.toISOString()}-${hour}`}
+            className="group relative min-h-[80px] border-b border-r border-mgmt-outline-variant/5 bg-white last:border-r-0 hover:bg-mgmt-surface-container-low"
+          >
+            {cellEvents.map((ev) => (
+              <EventBlock key={ev.id} ev={ev} onClick={() => onSelectEvent(ev)} />
+            ))}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function EventBlock({ ev, onClick }: { ev: CalEvent; onClick: () => void }) {
+  if (ev.variant === "therapy") {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="absolute inset-x-1 top-1 bottom-1 z-10 cursor-pointer overflow-hidden rounded-xl border-l-4 border-mgmt-primary bg-mgmt-tertiary-container p-2 text-left shadow-sm hover:brightness-[0.98] active:scale-[0.995] transition"
+        aria-label={`Edit appointment: ${ev.title}`}
+      >
+        <p className="text-[0.65rem] font-bold leading-tight text-mgmt-on-primary-container">{ev.title}</p>
+        <p className="text-[0.6rem] text-mgmt-on-primary-container/80">{ev.subtitle}</p>
+      </button>
+    );
+  }
+  const h = ev.durationMin ? Math.max(80, (ev.durationMin / 60) * 80) : 150;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="absolute inset-x-1 top-1 z-10 cursor-pointer overflow-hidden rounded-xl border-l-4 border-slate-400 bg-slate-100 p-2 text-left shadow-sm hover:bg-slate-200/70 active:scale-[0.995] transition"
+      style={{ height: `${h}px` }}
+      aria-label={`Edit appointment: ${ev.title}`}
+    >
+      <p className="text-[0.65rem] font-bold leading-tight text-slate-700">{ev.title}</p>
+      <p className="text-[0.6rem] text-slate-500">{ev.subtitle}</p>
+    </button>
+  );
+}
+
+function MonthGrid({
+  anchor,
+  today,
+  onSelectDay,
+}: {
+  anchor: Date;
+  today: Date;
+  onSelectDay: (d: Date) => void;
+}) {
+  const year = anchor.getFullYear();
+  const month = anchor.getMonth();
+  const first = new Date(year, month, 1);
+  const startPad = first.getDay() === 0 ? 6 : first.getDay() - 1;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < startPad; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const headers = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  return (
+    <div className="p-6">
+      <div className="mx-auto max-w-3xl">
+        <div className="mb-3 grid grid-cols-7 gap-1 text-center text-[0.7rem] font-bold uppercase tracking-wider text-mgmt-on-surface-variant">
+          {headers.map((h) => (
+            <div key={h}>{h}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((day, idx) => {
+            if (day === null) return <div key={`empty-${idx}`} className="aspect-square" />;
+            const d = new Date(year, month, day);
+            const isToday = sameDay(d, today);
+            return (
+              <button
+                key={day}
+                type="button"
+                onClick={() => onSelectDay(d)}
+                className={`flex aspect-square items-center justify-center rounded-lg text-sm font-semibold transition-colors ${
+                  isToday
+                    ? "bg-mgmt-primary text-mgmt-on-primary"
+                    : "bg-white text-mgmt-on-surface hover:bg-mgmt-surface-container-low"
+                }`}
+              >
+                {day}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
