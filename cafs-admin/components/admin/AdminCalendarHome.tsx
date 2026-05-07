@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
-import CreateAppointmentModal from "@/components/admin/CreateAppointmentModal";
+import CreateAppointmentModal, {
+  type CreateAppointmentInitialSchedule,
+} from "@/components/admin/CreateAppointmentModal";
 import EditAppointmentModal, { type AdminEditableAppointment } from "@/components/admin/EditAppointmentModal";
 
 const TIME_LABELS = Array.from({ length: 24 }, (_, i) => {
@@ -94,10 +96,24 @@ function titleForAppointmentType(t: string | null) {
   return "Appointment";
 }
 
+function pad2(n: number) {
+  return n < 10 ? `0${n}` : `${n}`;
+}
+
+function slotToInitialSchedule(colDate: Date, hour: number): CreateAppointmentInitialSchedule {
+  const d = new Date(colDate);
+  return {
+    date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
+    startTime: `${pad2(hour)}:00`,
+    durationMin: 60,
+  };
+}
+
 export default function AdminCalendarHome({ therapistId }: { therapistId?: string }) {
   const [view, setView] = useState<CalendarView>("week");
   const [anchor, setAnchor] = useState(() => new Date());
   const [createOpen, setCreateOpen] = useState(false);
+  const [createInitialSchedule, setCreateInitialSchedule] = useState<CreateAppointmentInitialSchedule | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [selected, setSelected] = useState<AdminEditableAppointment | null>(null);
   const [loading, setLoading] = useState(false);
@@ -232,8 +248,12 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
     <main className="flex min-h-0 flex-1 overflow-hidden">
       <CreateAppointmentModal
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateOpen(false);
+          setCreateInitialSchedule(null);
+        }}
         therapistId={therapistId}
+        initialSchedule={createInitialSchedule}
         onCreated={() => {
           setReloadKey((k) => k + 1);
         }}
@@ -332,7 +352,10 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
 
             <button
               type="button"
-              onClick={() => setCreateOpen(true)}
+              onClick={() => {
+                setCreateInitialSchedule(null);
+                setCreateOpen(true);
+              }}
               className="flex items-center gap-2 rounded-xl bg-gradient-to-br from-mgmt-primary to-mgmt-primary-dim px-5 py-2.5 text-sm font-semibold text-mgmt-on-primary shadow-md transition-all active:scale-95"
             >
               <MaterialSymbol name="add" className="text-lg" />
@@ -398,6 +421,10 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
                   hour={hour}
                   dayColumns={dayColumns}
                   events={events}
+                  onEmptySlot={(colDate) => {
+                    setCreateInitialSchedule(slotToInitialSchedule(colDate, hour));
+                    setCreateOpen(true);
+                  }}
                   onSelectEvent={(ev) => {
                     const dateLine = ev.start
                       .toLocaleDateString("en-US", { day: "2-digit", month: "short" })
@@ -439,12 +466,14 @@ function TimeRow({
   hour,
   dayColumns,
   events,
+  onEmptySlot,
   onSelectEvent,
 }: {
   timeLabel: string;
   hour: number;
   dayColumns: Date[];
   events: CalEvent[];
+  onEmptySlot: (colDate: Date) => void;
   onSelectEvent: (ev: CalEvent) => void;
 }) {
   return (
@@ -457,7 +486,17 @@ function TimeRow({
         return (
           <div
             key={`${colDate.toISOString()}-${hour}`}
-            className="group relative min-h-[80px] border-b border-r border-mgmt-outline-variant/5 bg-white last:border-r-0 hover:bg-mgmt-surface-container-low"
+            role="button"
+            tabIndex={0}
+            onClick={() => onEmptySlot(colDate)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onEmptySlot(colDate);
+              }
+            }}
+            className="group relative min-h-[80px] border-b border-r border-mgmt-outline-variant/5 bg-white last:border-r-0 hover:bg-mgmt-surface-container-low text-left cursor-pointer"
+            aria-label={`Create appointment ${colDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} at ${timeLabel}`}
           >
             {cellEvents.map((ev) => (
               <EventBlock key={ev.id} ev={ev} onClick={() => onSelectEvent(ev)} />
@@ -474,7 +513,10 @@ function EventBlock({ ev, onClick }: { ev: CalEvent; onClick: () => void }) {
     return (
       <button
         type="button"
-        onClick={onClick}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
         className="absolute inset-x-1 top-1 bottom-1 z-10 cursor-pointer overflow-hidden rounded-xl border-l-4 border-mgmt-primary bg-mgmt-tertiary-container p-2 text-left shadow-sm hover:brightness-[0.98] active:scale-[0.995] transition"
         aria-label={`Edit appointment: ${ev.title}`}
       >
@@ -487,7 +529,10 @@ function EventBlock({ ev, onClick }: { ev: CalEvent; onClick: () => void }) {
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
       className="absolute inset-x-1 top-1 z-10 cursor-pointer overflow-hidden rounded-xl border-l-4 border-slate-400 bg-slate-100 p-2 text-left shadow-sm hover:bg-slate-200/70 active:scale-[0.995] transition"
       style={{ height: `${h}px` }}
       aria-label={`Edit appointment: ${ev.title}`}

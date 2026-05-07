@@ -29,15 +29,23 @@ function formatTime(d: Date) {
   return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
+export type CreateAppointmentInitialSchedule = {
+  date: string;
+  startTime: string;
+  durationMin: number;
+};
+
 export default function CreateAppointmentModal({
   open,
   onClose,
   therapistId,
   onCreated,
+  initialSchedule,
 }: {
   open: boolean;
   onClose: () => void;
   therapistId?: string;
+  initialSchedule?: CreateAppointmentInitialSchedule | null;
   onCreated?: (created: {
     appointmentId: string;
     therapistId: string;
@@ -110,8 +118,13 @@ export default function CreateAppointmentModal({
       setVideoLink("");
       setNotes("");
       setErrorMsg(null);
+      if (initialSchedule) {
+        setDate(initialSchedule.date);
+        setStartTime(initialSchedule.startTime);
+        setDurationMin(initialSchedule.durationMin);
+      }
     });
-  }, [open]);
+  }, [open, initialSchedule]);
 
   useEffect(() => {
     if (!open) return;
