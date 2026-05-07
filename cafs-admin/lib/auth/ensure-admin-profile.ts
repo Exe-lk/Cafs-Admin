@@ -6,6 +6,11 @@ type AdminProfileInput = {
   phone?: string | null;
 };
 
+type ExistingProfile = {
+  role: "admin" | "therapist" | "front_office" | "client";
+  is_active: boolean;
+};
+
 /**
  * Ensures `profiles` exists for the user with role `admin`.
  * Does NOT create a `client_profiles` row.
@@ -33,10 +38,21 @@ export async function ensureAdminProfile(
       return { profileError: insErr.message };
     }
 
+    const { data: existing, error: readErr } = await supabase
+      .from("profiles")
+      .select("role,is_active")
+      .eq("user_id", userId)
+      .maybeSingle<ExistingProfile>();
+
+    if (readErr) return { profileError: readErr.message };
+    if (!existing) return { profileError: "profile_not_found" };
+    if (existing.role !== "admin" || !existing.is_active) {
+      return { profileError: "admin_access_denied" };
+    }
+
     const { error: upErr } = await supabase
       .from("profiles")
       .update({
-        role: "admin",
         full_name: input.fullName,
         email: input.email,
         phone: input.phone ?? null,

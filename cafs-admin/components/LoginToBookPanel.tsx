@@ -7,14 +7,20 @@ export default function LoginToBookPanel({
   backHref = "/book",
   googleEndpoint = "/api/auth/patient/google",
   oauthNext,
+  initialErrorMessage = null,
 }: {
   backHref?: string;
   /** API route that starts Google OAuth and returns `{ url }` */
   googleEndpoint?: string;
   /** `next` passed to OAuth start endpoint; defaults to `backHref` */
   oauthNext?: string;
+  /** Optional auth error to show after redirect from callback */
+  initialErrorMessage?: string | null;
 }) {
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(
+    initialErrorMessage,
+  );
 
   const startGoogle = useCallback(async () => {
     if (googleLoading) return;
@@ -37,12 +43,29 @@ export default function LoginToBookPanel({
       window.location.assign(data.url);
     } catch (e) {
       console.error(e);
+      setErrorMessage("Unable to start Google sign-in. Please try again.");
       setGoogleLoading(false);
     }
   }, [backHref, googleEndpoint, googleLoading, oauthNext]);
 
   return (
     <main className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 relative">
+      {errorMessage ? (
+        <div className="absolute top-6 left-1/2 z-50 w-[min(92vw,32rem)] -translate-x-1/2 rounded-xl border border-red-400/35 bg-red-950/80 px-4 py-3 text-left shadow-lg backdrop-blur">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm text-red-100">{errorMessage}</p>
+            <button
+              type="button"
+              onClick={() => setErrorMessage(null)}
+              className="shrink-0 text-red-200/80 transition hover:text-white"
+              aria-label="Dismiss error message"
+            >
+              x
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <Link
         href={backHref}
         className="absolute top-8 left-8 flex items-center gap-2 text-gray-400 hover:text-white transition-colors"

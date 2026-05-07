@@ -45,23 +45,39 @@ export async function GET(request: NextRequest) {
 
     if (user) {
       const adminSupabase = createSupabaseServiceRoleClient();
-      const { profileError } = await ensureAdminProfile(
-        adminSupabase,
-        user.id,
-        {
-          fullName: displayNameFromUser(user),
-          email: user.email ?? null,
-          phone: null,
-        },
-      );
+      const { data: existing, error: profileReadError } = await adminSupabase
+        .from("profiles")
+        .select("role,is_active")
+        .eq("user_id", user.id)
+        .maybeSingle<{ role: string; is_active: boolean }>();
+
+      if (
+        profileReadError ||
+        !existing ||
+        existing.role !== "admin" ||
+        !existing.is_active
+      ) {
+        // Ensure non-admin users cannot keep a valid admin session cookie.
+        await authedSupabase.auth.signOut();
+        return NextResponse.redirect(
+          new URL("/login?auth_error=admin_access_denied", origin),
+        );
+      }
+
+      const { profileError } = await ensureAdminProfile(adminSupabase, user.id, {
+        fullName: displayNameFromUser(user),
+        email: user.email ?? null,
+        phone: null,
+      });
       if (profileError) {
         console.error("ensureAdminProfile failed", {
           userId: user.id,
           profileError,
         });
-        const dest = new URL(nextPath, origin);
-        dest.searchParams.set("profile_error", "1");
-        return NextResponse.redirect(dest);
+        await authedSupabase.auth.signOut();
+        return NextResponse.redirect(
+          new URL("/login?auth_error=admin_profile_sync_failed", origin),
+        );
       }
     }
 
