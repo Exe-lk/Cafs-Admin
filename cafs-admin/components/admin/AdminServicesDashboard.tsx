@@ -131,7 +131,7 @@ export default function AdminServicesDashboard() {
         />
       ) : null}
 
-      <header className="sticky top-12 z-10 flex items-center justify-between border-b border-mgmt-outline-variant bg-mgmt-surface-container-lowest px-4 py-5 sm:top-0 sm:px-6 lg:px-8 lg:py-6">
+      <header className="sticky top-12 z-10 flex items-center justify-between bg-mgmt-surface-container-lowest px-4 py-5 sm:top-0 sm:px-6 lg:px-8 lg:py-6">
         <h1 className="text-2xl font-bold text-mgmt-on-surface">Services</h1>
         <div className="flex items-center gap-4">
           <button
@@ -198,8 +198,8 @@ export default function AdminServicesDashboard() {
               key={service.id}
               className={
                 service.highlighted
-                  ? "group flex items-center rounded-lg border border-mgmt-outline-variant border-l-4 border-l-mgmt-primary-container bg-mgmt-surface-container-lowest p-4 transition-all hover:border-mgmt-primary-container hover:shadow-sm"
-                  : "group flex items-center rounded-lg border border-mgmt-outline-variant bg-mgmt-surface-container-lowest p-4 transition-all hover:border-mgmt-on-surface-variant hover:shadow-sm"
+                  ? "group flex items-center rounded-lg border-l-4 border-l-mgmt-primary-container bg-mgmt-surface-container-lowest p-4 transition-all hover:shadow-sm"
+                  : "group flex items-center rounded-lg bg-mgmt-surface-container-lowest p-4 transition-all hover:shadow-sm"
               }
             >
               <button

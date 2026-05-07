@@ -45,14 +45,18 @@ export default function TheraphistHomePage() {
         </div>
       </div>
 
-      {/* Desktop: directory column */}
-      <div className="hidden lg:block">
+      {/* Desktop: fixed full-viewport white column + spacer (matches settings / therapist shell) */}
+      <div
+        className="hidden overflow-hidden border-r border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest lg:fixed lg:left-64 lg:top-0 lg:z-40 lg:flex lg:h-dvh lg:w-72 lg:flex-col"
+        data-purpose="therapist-directory-fixed"
+      >
         <TherapistsDirectoryColumn
           therapists={therapists}
           selectedId={selectedId}
           onSelect={(t) => setSelectedId(t.id)}
         />
       </div>
+      <div className="hidden w-72 shrink-0 lg:block" aria-hidden />
 
       <div className="min-w-0 flex-1">
         <AdminCalendarHome therapistId={selected?.id} />

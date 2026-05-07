@@ -98,8 +98,12 @@ export default function AdminCustomersHome() {
 
   return (
     <div className="flex h-full min-h-0 bg-mgmt-surface">
-      {/* Desktop: customers list */}
-      <section className="hidden w-80 shrink-0 flex-col bg-mgmt-surface-container-lowest md:flex">
+      {/* Desktop: fixed full-height white column */}
+      <div
+        className="hidden overflow-hidden border-r border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest md:fixed md:left-64 md:top-0 md:z-40 md:flex md:h-dvh md:w-72 md:flex-col"
+        data-purpose="customers-list-fixed"
+      >
+      <section className="flex min-h-0 flex-1 flex-col bg-mgmt-surface-container-lowest">
         <header className="p-6">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-[1.5rem] font-semibold text-mgmt-on-background">Customers</h2>
@@ -171,6 +175,8 @@ export default function AdminCustomersHome() {
           )}
         </div>
       </section>
+      </div>
+      <div className="hidden w-72 shrink-0 md:block" aria-hidden />
 
       <section className="min-w-0 flex-1 overflow-y-auto bg-mgmt-surface p-4 sm:p-6 md:p-8">
         {/* Mobile: customer selector + search */}

@@ -39,8 +39,8 @@ export default function AdminConnectHome() {
   return (
     <div className="flex min-h-dvh w-full bg-mgmt-surface-container-lowest">
       {/* Conversation list */}
-      <aside className="hidden w-72 shrink-0 flex-col border-r border-mgmt-outline-variant bg-mgmt-surface-container-lowest md:flex">
-        <header className="flex shrink-0 items-center justify-between border-b border-mgmt-outline-variant px-5 py-4">
+      <aside className="hidden w-72 shrink-0 flex-col bg-mgmt-surface-container-lowest md:flex">
+        <header className="flex shrink-0 items-center justify-between px-5 py-4">
           <h1 className="text-lg font-semibold text-mgmt-on-surface">Connect</h1>
           <button
             type="button"
@@ -101,8 +101,8 @@ export default function AdminConnectHome() {
             mobileThreadsOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
-          <aside className="flex h-full w-full flex-col border-r border-mgmt-outline-variant bg-mgmt-surface-container-lowest">
-            <header className="flex shrink-0 items-center justify-between border-b border-mgmt-outline-variant px-5 py-4">
+          <aside className="flex h-full w-full flex-col bg-mgmt-surface-container-lowest">
+            <header className="flex shrink-0 items-center justify-between px-5 py-4">
               <h1 className="text-lg font-semibold text-mgmt-on-surface">Connect</h1>
               <button
                 type="button"
@@ -148,7 +148,7 @@ export default function AdminConnectHome() {
       </div>
 
       <main className="flex min-w-0 flex-1 flex-col bg-mgmt-surface-container-lowest">
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-mgmt-outline-variant px-4 py-3 sm:px-6">
+        <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -189,17 +189,17 @@ export default function AdminConnectHome() {
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-28 sm:px-6 sm:py-6 sm:pb-6">
           <div className="mx-auto max-w-3xl space-y-6">
             <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-mgmt-outline-variant/40" />
+              <div className="h-px flex-1 bg-transparent" />
               <span className="shrink-0 text-xs font-medium text-mgmt-on-surface-variant">1 Apr 2028</span>
-              <div className="h-px flex-1 bg-mgmt-outline-variant/40" />
+              <div className="h-px flex-1 bg-transparent" />
             </div>
             <p className="text-center text-sm text-mgmt-on-surface-variant">
               Thilina Dilshan has joined this collab
             </p>
             <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-mgmt-outline-variant/40" />
+              <div className="h-px flex-1 bg-transparent" />
               <span className="shrink-0 text-xs font-medium text-mgmt-on-surface-variant">Today</span>
-              <div className="h-px flex-1 bg-mgmt-outline-variant/40" />
+              <div className="h-px flex-1 bg-transparent" />
             </div>
             <div className="flex gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-mgmt-primary-container text-xs font-bold text-mgmt-on-primary-container">
@@ -219,7 +219,7 @@ export default function AdminConnectHome() {
           </div>
         </div>
 
-        <footer className="fixed inset-x-0 bottom-0 z-40 shrink-0 border-t border-mgmt-outline-variant bg-mgmt-surface-container-lowest px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:static sm:z-auto sm:px-6 sm:py-4 sm:pb-4">
+        <footer className="fixed inset-x-0 bottom-0 z-40 shrink-0 bg-mgmt-surface-container-lowest px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:static sm:z-auto sm:px-6 sm:py-4 sm:pb-4">
           <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-mgmt-outline-variant bg-mgmt-surface-container-low px-2 py-2">
             <button
               type="button"

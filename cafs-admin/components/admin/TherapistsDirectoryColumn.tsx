@@ -44,8 +44,8 @@ export default function TherapistsDirectoryColumn({
   }, [list, query]);
 
   return (
-    <aside className="flex h-full min-h-0 w-[360px] shrink-0 flex-col border-r border-mgmt-outline-variant/10 bg-mgmt-surface">
-      <div className="sticky top-0 z-40 border-b border-mgmt-outline-variant/10 bg-white/80 px-5 py-4 backdrop-blur-xl">
+    <aside className="flex h-full min-h-0 w-full flex-col bg-mgmt-surface-container-lowest">
+      <div className="sticky top-0 z-40 shrink-0 border-b border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
             Therapists

@@ -27,10 +27,14 @@ export default function AdminServicesShell({ children }: { children: ReactNode }
 
   return (
     <div className="flex h-full min-h-0 flex-1">
-      {/* Desktop sub nav */}
-      <div className="hidden md:block">
+      {/* Desktop sub nav: fixed full-height white column */}
+      <div
+        className="hidden overflow-y-auto bg-mgmt-surface-container-lowest md:fixed md:left-64 md:top-0 md:z-40 md:flex md:h-dvh md:w-72 md:flex-col"
+        data-purpose="services-subnav-fixed"
+      >
         <ServicesSubNav />
       </div>
+      <div className="hidden w-72 shrink-0 md:block" aria-hidden />
 
       {/* Mobile header + in-page dropdown */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-mgmt-surface-container-lowest">

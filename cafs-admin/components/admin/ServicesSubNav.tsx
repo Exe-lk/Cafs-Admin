@@ -18,7 +18,7 @@ export default function ServicesSubNav() {
 
   return (
     <aside
-      className="flex w-72 shrink-0 flex-col border-r border-mgmt-outline-variant bg-mgmt-surface-container-lowest"
+      className="flex min-h-0 w-full flex-1 flex-col bg-mgmt-surface-container-lowest"
       data-purpose="secondary-navigation"
     >
       <div className="p-6">
