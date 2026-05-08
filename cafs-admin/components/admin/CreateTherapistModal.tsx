@@ -92,17 +92,16 @@ export default function CreateTherapistModal({
                 <label className="ml-1 block text-[0.75rem] font-semibold uppercase tracking-wider text-mgmt-on-surface-variant">
                   Primary phone
                 </label>
-                <div className="flex items-center gap-3 rounded-xl bg-mgmt-surface-container-low px-4 py-3">
-                  <MaterialSymbol name="flag" className="text-[14px] text-mgmt-on-surface-variant" />
+                <div className="flex w-full items-center gap-3 rounded-xl bg-mgmt-surface-container-low px-4 py-3">
                   <input
-                    className="w-14 border-none bg-transparent text-sm text-mgmt-on-surface outline-none"
+                    className="w-14 shrink-0 border-none bg-transparent text-sm text-mgmt-on-surface outline-none"
                     value={draft.phoneCountry}
                     onChange={(e) => setDraft((p) => ({ ...p, phoneCountry: e.target.value }))}
                     aria-label="Country code"
                   />
-                  <div className="h-4 w-px bg-mgmt-outline-variant/60" />
+                  <div className="h-4 w-px shrink-0 bg-mgmt-outline-variant/60" />
                   <input
-                    className="min-w-0 flex-1 border-none bg-transparent text-sm text-mgmt-on-surface outline-none"
+                    className="min-w-0 w-full flex-1 border-none bg-transparent text-sm text-mgmt-on-surface outline-none"
                     value={draft.phoneNumber}
                     onChange={(e) => setDraft((p) => ({ ...p, phoneNumber: e.target.value }))}
                     aria-label="Phone number"

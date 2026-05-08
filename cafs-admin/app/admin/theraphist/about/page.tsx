@@ -107,17 +107,16 @@ export default function TheraphistSettingsAboutPage() {
             <label className="block text-xs font-semibold tracking-widest text-mgmt-on-surface-variant">
               PRIMARY PHONE
             </label>
-            <div className="mt-2 flex items-center gap-3 rounded-xl bg-mgmt-surface-container-low px-4 py-3">
-              <MaterialSymbol name="flag" className="text-[14px] text-mgmt-on-surface-variant" />
+            <div className="mt-2 flex w-full items-center gap-3 rounded-xl bg-mgmt-surface-container-low px-4 py-3">
               <input
-                className="w-12 border-none bg-transparent text-sm text-mgmt-on-surface outline-none"
+                className="w-14 shrink-0 border-none bg-transparent text-sm text-mgmt-on-surface outline-none"
                 value={form.phoneCountry}
                 onChange={(e) => setForm((p) => ({ ...p, phoneCountry: e.target.value }))}
                 aria-label="Country code"
               />
-              <div className="h-4 w-px bg-mgmt-outline-variant/60" />
+              <div className="h-4 w-px shrink-0 bg-mgmt-outline-variant/60" />
               <input
-                className="min-w-0 flex-1 border-none bg-transparent text-sm text-mgmt-on-surface outline-none"
+                className="min-w-0 w-full flex-1 border-none bg-transparent text-sm text-mgmt-on-surface outline-none"
                 value={form.phoneNumber}
                 onChange={(e) => setForm((p) => ({ ...p, phoneNumber: e.target.value }))}
                 aria-label="Phone number"

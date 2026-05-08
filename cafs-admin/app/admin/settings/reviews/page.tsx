@@ -75,7 +75,7 @@ export default function AdminSettingsReviewsPage() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto bg-mgmt-surface-container-lowest">
-      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-10 lg:py-8 2xl:max-w-[1400px]">
         <header className="border-b border-mgmt-outline-variant/15 pb-0">
           <div className="flex flex-col gap-4 pb-4 sm:flex-row sm:items-end sm:justify-between">
             <nav className="flex gap-8" aria-label="Reviews sections">

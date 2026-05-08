@@ -25,8 +25,8 @@ export default function AdminSidebar({
     { href: "/admin/services", label: "Services", icon: "design_services" as const },
     { href: "/admin/connect", label: "Connect", icon: "hub" as const },
     { href: "/admin/customers", label: "Customers", icon: "group" as const },
-    { href: "/admin/theraphist", label: "Theraphist", icon: "settings" as const },
-    { href: "/admin/settings", label: "Settings", icon: "display_settings" as const },
+    { href: "/admin/theraphist", label: "Theraphist", icon: "medical_services" as const },
+    { href: "/admin/settings", label: "Settings", icon: "settings" as const },
   ];
 
   return (
