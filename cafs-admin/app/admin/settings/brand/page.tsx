@@ -367,24 +367,7 @@ export default function AdminSettingsBrandPage() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-mgmt-on-surface">Your Booking Page URL</label>
-              <div className="mt-2 flex min-h-[48px] w-full items-stretch overflow-hidden rounded-xl border border-mgmt-outline-variant/30 bg-mgmt-surface-container-lowest focus-within:border-mgmt-primary/40 focus-within:ring-2 focus-within:ring-mgmt-primary/15">
-                <input
-                  type="text"
-                  value={bookingSlug}
-                  onChange={(e) =>
-                    setBookingSlug(e.target.value.replace(/[^a-zA-Z0-9-_]/g, "").toLowerCase())
-                  }
-                  className="min-w-0 flex-1 border-none bg-transparent px-4 py-3 text-sm text-mgmt-on-surface outline-none"
-                  placeholder="your-page"
-                  spellCheck={false}
-                />
-                <div className="flex shrink-0 items-center border-l border-mgmt-outline-variant/25 bg-mgmt-surface-container-low px-4 text-sm text-mgmt-on-surface-variant">
-                  {BOOKING_URL_SUFFIX}
-                </div>
-              </div>
-            </div>
+            
 
             <div>
               <label className="block text-sm font-semibold text-mgmt-on-surface">Industry</label>
@@ -610,22 +593,7 @@ export default function AdminSettingsBrandPage() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-mgmt-on-surface">Currency</label>
-            <div className="relative mt-2">
-              <select value={currency} onChange={(e) => setCurrency(e.target.value)} className={fieldSelectClass}>
-                {CURRENCY_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <MaterialSymbol
-                name="expand_more"
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[22px] text-mgmt-on-surface-variant"
-              />
-            </div>
-          </div>
+          
         </section>
 
         <section className="mt-14 space-y-6 border-t border-mgmt-outline-variant/15 pt-12 pb-8">
