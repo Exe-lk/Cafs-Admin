@@ -34,6 +34,7 @@ export default async function RedirectLoginPage({
         backHref="/"
         oauthNext="/admin"
         googleEndpoint="/api/auth/admin/google"
+        googleOAuthMode="redirect"
         initialErrorMessage={authErrorMessage}
       />
     </div>

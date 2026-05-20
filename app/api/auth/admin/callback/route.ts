@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/route-handler";
-import { getRequestOrigin } from "@/lib/auth/request-origin";
-import { safeNextPath } from "@/lib/auth/safe-next-path";
+import { consumeAdminOAuthNextCookie } from "@/lib/auth/admin-oauth-next-cookie";
+import { getSiteUrl } from "@/lib/auth/request-origin";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import {
   displayNameFromUser,
@@ -14,10 +14,12 @@ import {
  * Then ensures an `admin` profile row exists (service-role write).
  */
 export async function GET(request: NextRequest) {
-  const origin = getRequestOrigin(request);
+  const origin = getSiteUrl(request);
   const url = request.nextUrl;
   const code = url.searchParams.get("code");
-  const nextPath = safeNextPath(url.searchParams.get("next"));
+  const nextPath = await consumeAdminOAuthNextCookie(
+    url.searchParams.get("next"),
+  );
 
   if (!code) {
     return NextResponse.redirect(

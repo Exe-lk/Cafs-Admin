@@ -7,6 +7,7 @@ export default function LoginToBookPanel({
   backHref = "/book",
   googleEndpoint = "/api/auth/patient/google",
   oauthNext,
+  googleOAuthMode = "fetch",
   initialErrorMessage = null,
 }: {
   backHref?: string;
@@ -14,6 +15,11 @@ export default function LoginToBookPanel({
   googleEndpoint?: string;
   /** `next` passed to OAuth start endpoint; defaults to `backHref` */
   oauthNext?: string;
+  /**
+   * `redirect` — full-page GET to the OAuth route (recommended for admin; sets PKCE cookies reliably).
+   * `fetch` — POST then navigate to returned URL (legacy).
+   */
+  googleOAuthMode?: "fetch" | "redirect";
   /** Optional auth error to show after redirect from callback */
   initialErrorMessage?: string | null;
 }) {
@@ -25,11 +31,20 @@ export default function LoginToBookPanel({
   const startGoogle = useCallback(async () => {
     if (googleLoading) return;
     setGoogleLoading(true);
+
+    const next = oauthNext ?? backHref;
+
+    if (googleOAuthMode === "redirect") {
+      const params = new URLSearchParams({ next });
+      window.location.assign(`${googleEndpoint}?${params.toString()}`);
+      return;
+    }
+
     try {
       const res = await fetch(googleEndpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ next: oauthNext ?? backHref }),
+        body: JSON.stringify({ next }),
       });
 
       const data = (await res.json()) as { url?: string; error?: string };
@@ -46,7 +61,7 @@ export default function LoginToBookPanel({
       setErrorMessage("Unable to start Google sign-in. Please try again.");
       setGoogleLoading(false);
     }
-  }, [backHref, googleEndpoint, googleLoading, oauthNext]);
+  }, [backHref, googleEndpoint, googleLoading, googleOAuthMode, oauthNext]);
 
   return (
     <main className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 relative">

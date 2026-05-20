@@ -1,18 +1,59 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createSupabaseRouteHandlerClient } from "@/lib/supabase/route-handler";
-import { getRequestOrigin } from "@/lib/auth/request-origin";
+import { startAdminGoogleOAuth } from "@/lib/auth/start-admin-google-oauth";
+import { getSiteUrl } from "@/lib/auth/request-origin";
 import { safeNextPath } from "@/lib/auth/safe-next-path";
 
 type GoogleBody = {
-  /** Path to send the user to after OAuth (query `next` on callback). */
+  /** Path to send the user to after OAuth (stored in cookie, not on redirectTo). */
   next?: string;
 };
 
+function resolveNextPath(
+  request: NextRequest,
+  bodyNext: string | null,
+): string {
+  const fromQuery = request.nextUrl.searchParams.get("next");
+  return safeNextPath(bodyNext ?? fromQuery);
+}
+
 /**
- * Starts Google OAuth for admins. After Google + Supabase, the user lands on
- * `/api/auth/admin/callback` which exchanges the code, sets cookies, and ensures
- * an `admin` profile row exists.
+ * Starts Google OAuth for admins (GET: browser redirect, POST: JSON for legacy clients).
+ * After Google + Supabase, the user lands on `/api/auth/admin/callback`.
  */
+export async function GET(request: NextRequest) {
+  const nextPath = resolveNextPath(request, null);
+
+  try {
+    const result = await startAdminGoogleOAuth(request, nextPath);
+
+    if (!result.ok) {
+      const origin = getSiteUrl(request);
+      return NextResponse.redirect(
+        new URL(
+          `/login?auth_error=${encodeURIComponent(result.error)}`,
+          origin,
+        ),
+      );
+    }
+
+    if (process.env.NODE_ENV === "development") {
+      console.info("[admin-oauth] redirectTo:", result.callbackUrl);
+    }
+
+    return NextResponse.redirect(result.url);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Server configuration error";
+    try {
+      const origin = getSiteUrl(request);
+      return NextResponse.redirect(
+        new URL(`/login?auth_error=${encodeURIComponent(message)}`, origin),
+      );
+    } catch {
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+  }
+}
+
 export async function POST(request: NextRequest) {
   let body: GoogleBody = {};
   try {
@@ -22,34 +63,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const nextPath = safeNextPath(typeof body.next === "string" ? body.next : null);
+  const nextPath = resolveNextPath(
+    request,
+    typeof body.next === "string" ? body.next : null,
+  );
 
   try {
-    const supabase = await createSupabaseRouteHandlerClient();
-    const origin = getRequestOrigin(request);
-    const callbackUrl = new URL("/api/auth/admin/callback", origin);
-    callbackUrl.searchParams.set("next", nextPath);
+    const result = await startAdminGoogleOAuth(request, nextPath);
 
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: callbackUrl.toString(),
-        scopes: "email profile openid",
-      },
-    });
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    if (!data.url) {
-      return NextResponse.json(
-        { error: "Provider did not return an authorization URL" },
-        { status: 502 },
-      );
+    if (!result.ok) {
+      const status = result.error.includes("authorization URL") ? 502 : 400;
+      return NextResponse.json({ error: result.error }, { status });
     }
 
-    return NextResponse.json({ url: data.url });
+    if (process.env.NODE_ENV === "development") {
+      console.info("[admin-oauth] redirectTo:", result.callbackUrl);
+    }
+
+    return NextResponse.json({ url: result.url });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Server configuration error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
