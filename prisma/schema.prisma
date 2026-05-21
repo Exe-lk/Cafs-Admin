@@ -78,6 +78,18 @@ enum NotificationStatus {
   failed
 }
 
+enum DocumentKind {
+  therapist_file
+  client_file
+  therapist_link
+}
+
+enum DocumentSharePermission {
+  view
+  download
+  edit
+}
+
 /// One row per authenticated user (`user_id` = `auth.users.id` in Supabase).
 model Profile {
   userId   String   @id @map("user_id") @db.Uuid
@@ -109,6 +121,12 @@ model Profile {
   auditLogsAsActor AuditLog[] @relation("AuditLogActor")
 
   oauthAccounts OAuthAccount[]
+
+  documentsUploaded Document[] @relation("DocumentUploader")
+  documentSharesReceived DocumentShare[] @relation("DocumentShareWith")
+  documentSharesSent DocumentShare[] @relation("DocumentShareBy")
+  therapistClientLinksAsTherapist TherapistClient[] @relation("TherapistClientTherapist")
+  therapistClientLinksAsClient TherapistClient[] @relation("TherapistClientClient")
 
   @@map("profiles")
 }
@@ -458,4 +476,62 @@ model Message {
 
   @@index([threadId, createdAt])
   @@map("messages")
+}
+
+/// Therapist may access linked client uploads (e.g. prescriptions). Enable RLS in Supabase; APIs use service role + explicit checks until RLS is applied.
+model TherapistClient {
+  id          String   @id @default(uuid()) @map("id") @db.Uuid
+  therapistId String   @map("therapist_id") @db.Uuid
+  clientId    String   @map("client_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  therapist Profile @relation("TherapistClientTherapist", fields: [therapistId], references: [userId])
+  client    Profile @relation("TherapistClientClient", fields: [clientId], references: [userId])
+
+  @@unique([therapistId, clientId])
+  @@index([therapistId])
+  @@index([clientId])
+  @@map("therapist_clients")
+}
+
+/// File metadata for private bucket objects (therapist materials and client uploads).
+/// therapist_link rows store external https URLs (no storage object).
+model Document {
+  id            String       @id @default(uuid()) @map("id") @db.Uuid
+  name          String
+  storageBucket String       @map("storage_bucket")
+  storagePath   String       @unique @map("storage_path")
+  mimeType      String?      @map("mime_type")
+  sizeBytes     BigInt?      @map("size_bytes")
+  documentKind  DocumentKind @map("document_kind")
+  externalUrl   String?      @map("external_url")
+  linkProvider  String?      @map("link_provider")
+  uploadedBy    String       @map("uploaded_by") @db.Uuid
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  uploader Profile        @relation("DocumentUploader", fields: [uploadedBy], references: [userId])
+  shares   DocumentShare[]
+
+  @@index([uploadedBy, createdAt])
+  @@index([documentKind, uploadedBy])
+  @@map("documents")
+}
+
+model DocumentShare {
+  id         String                   @id @default(uuid()) @map("id") @db.Uuid
+  documentId String                   @map("document_id") @db.Uuid
+  sharedWith String                   @map("shared_with") @db.Uuid
+  sharedBy   String                   @map("shared_by") @db.Uuid
+  permission DocumentSharePermission
+  sharedAt   DateTime                 @default(now()) @map("shared_at")
+  expiresAt  DateTime?                @map("expires_at")
+
+  document  Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  recipient Profile  @relation("DocumentShareWith", fields: [sharedWith], references: [userId])
+  sharer    Profile  @relation("DocumentShareBy", fields: [sharedBy], references: [userId])
+
+  @@unique([documentId, sharedWith])
+  @@index([sharedWith])
+  @@index([sharedBy])
+  @@map("document_shares")
 }
