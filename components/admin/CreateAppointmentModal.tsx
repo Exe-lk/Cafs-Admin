@@ -2,6 +2,12 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import {
+  formatDateInTimeZone,
+  formatTimeInTimeZone,
+  normalizeTimeZone,
+  zonedLocalYmdTimeToUtc,
+} from "@/lib/timezone";
 
 type TabKey = "service" | "class" | "event" | "reminder";
 
@@ -25,10 +31,6 @@ function addMinutes(d: Date, mins: number) {
   return new Date(d.getTime() + mins * 60_000);
 }
 
-function formatTime(d: Date) {
-  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-}
-
 export type CreateAppointmentInitialSchedule = {
   date: string;
   startTime: string;
@@ -39,12 +41,14 @@ export default function CreateAppointmentModal({
   open,
   onClose,
   therapistId,
+  therapistTimezone,
   onCreated,
   initialSchedule,
 }: {
   open: boolean;
   onClose: () => void;
   therapistId?: string;
+  therapistTimezone?: string;
   initialSchedule?: CreateAppointmentInitialSchedule | null;
   onCreated?: (created: {
     appointmentId: string;
@@ -55,6 +59,7 @@ export default function CreateAppointmentModal({
   }) => void;
 }) {
   const titleId = useId();
+  const timeZone = normalizeTimeZone(therapistTimezone);
   const [tab, setTab] = useState<TabKey>("service");
 
   const [services, setServices] = useState<Array<{ serviceId: string; name: string }>>([]);
@@ -78,16 +83,19 @@ export default function CreateAppointmentModal({
 
   const scheduleLabel = useMemo(() => {
     const [y, m, d] = date.split("-").map((x) => Number(x));
-    const [hh, mm] = startTime.split(":").map((x) => Number(x));
-    const start = new Date(y ?? 0, (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0, 0, 0);
-    const end = addMinutes(start, durationMin);
-    const dayLabel = start.toLocaleDateString("en-US", {
+    const startUtc = zonedLocalYmdTimeToUtc(
+      { year: y ?? 0, month: m ?? 1, day: d ?? 1 },
+      startTime,
+      timeZone,
+    );
+    const endUtc = addMinutes(startUtc, durationMin);
+    const dayLabel = formatDateInTimeZone(startUtc, timeZone, {
       weekday: "short",
       day: "numeric",
       month: "short",
     });
-    return `${dayLabel} · ${formatTime(start)} — ${formatTime(end)}`;
-  }, [date, durationMin, startTime]);
+    return `${dayLabel} · ${formatTimeInTimeZone(startUtc, timeZone)} — ${formatTimeInTimeZone(endUtc, timeZone)}`;
+  }, [date, durationMin, startTime, timeZone]);
 
   useEffect(() => {
     if (!open) return;
@@ -414,8 +422,11 @@ export default function CreateAppointmentModal({
                 setErrorMsg(null);
                 try {
                   const [y, m, d] = date.split("-").map((x) => Number(x));
-                  const [hh, mm] = startTime.split(":").map((x) => Number(x));
-                  const start = new Date(y ?? 0, (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0, 0, 0);
+                  const start = zonedLocalYmdTimeToUtc(
+                    { year: y ?? 0, month: m ?? 1, day: d ?? 1 },
+                    startTime,
+                    timeZone,
+                  );
                   const end = addMinutes(start, durationMin);
 
                   const res = await fetch("/api/v1/admin/appointments", {

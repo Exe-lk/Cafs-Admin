@@ -8,6 +8,14 @@ type PutBody = {
   therapistId?: string;
   serviceId?: string;
   appointmentType?: "online" | "in_person";
+  status?:
+    | "pending_payment"
+    | "pending_confirmation"
+    | "confirmed"
+    | "cancelled"
+    | "completed"
+    | "no_show"
+    | "expired";
   startAt?: string;
   endAt?: string;
   note?: string;
@@ -38,6 +46,7 @@ export async function PUT(
   if (typeof body.therapistId === "string") payload.therapist_id = body.therapistId;
   if (typeof body.serviceId === "string") payload.service_id = body.serviceId;
   if (body.appointmentType) payload.appointment_type = body.appointmentType;
+  if (body.status) payload.status = body.status;
   if (typeof body.startAt === "string") {
     const d = parseIsoDateParam(body.startAt);
     if (!d) return err("Invalid startAt", 400);

@@ -2,6 +2,12 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import {
+  formatDateInTimeZone,
+  formatTimeInTimeZone,
+  normalizeTimeZone,
+  zonedLocalYmdTimeToUtc,
+} from "@/lib/timezone";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -19,6 +25,14 @@ export type AdminEditableAppointment = {
   notes?: string;
   proofUrl?: string;
   approvalStatus?: "pending" | "accepted" | "rejected";
+  appointmentStatus?:
+    | "pending_payment"
+    | "pending_confirmation"
+    | "confirmed"
+    | "cancelled"
+    | "completed"
+    | "no_show"
+    | "expired";
   /** When present, modal will persist changes via admin appointments API. */
   startAt?: string;
   /** When present, modal will persist changes via admin appointments API. */
@@ -28,16 +42,19 @@ export type AdminEditableAppointment = {
 
 export default function EditAppointmentModal({
   appointment,
+  therapistTimezone,
   onClose,
   onSave,
   onDelete,
 }: {
   appointment: AdminEditableAppointment;
+  therapistTimezone?: string;
   onClose: () => void;
   onSave: (next: AdminEditableAppointment) => void;
   onDelete: (args: { dayId: string; sessionId: string }) => void;
 }) {
   const titleId = useId();
+  const timeZone = normalizeTimeZone(therapistTimezone);
   const [draft, setDraft] = useState<AdminEditableAppointment>(appointment);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState("");
@@ -85,6 +102,9 @@ export default function EditAppointmentModal({
       : draft.approvalStatus === "rejected"
         ? "Rejected"
         : "Pending";
+  const showApprovalActions =
+    draft.appointmentStatus === "pending_payment" ||
+    draft.appointmentStatus === "pending_confirmation";
 
   return (
     <div className="fixed inset-0 z-[100] overflow-y-auto bg-mgmt-inverse-surface/10 backdrop-blur-[2px]">
@@ -128,13 +148,44 @@ export default function EditAppointmentModal({
                 <p className="text-[11px] font-semibold text-mgmt-on-surface-variant">Approval status</p>
                 <p className="truncate text-sm font-bold text-mgmt-on-surface">{approvalLabel}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setDraft((p) => ({ ...p, approvalStatus: "accepted" }))}
-                className="rounded-xl bg-black px-4 py-2 text-xs font-bold uppercase tracking-wider text-white transition-transform active:scale-95"
-              >
-                Approve
-              </button>
+              {showApprovalActions ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const hasProof = Boolean((draft.proofUrl ?? "").trim());
+                      if (!hasProof) {
+                        setErrorMsg(
+                          "Cannot approve appointment without a bank slip. Please upload or attach a proof link first.",
+                        );
+                        return;
+                      }
+                      setErrorMsg(null);
+                      setDraft((p) => ({
+                        ...p,
+                        approvalStatus: "accepted",
+                        appointmentStatus: "confirmed",
+                      }));
+                    }}
+                    className="rounded-xl bg-black px-4 py-2 text-xs font-bold uppercase tracking-wider text-white transition-transform active:scale-95"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDraft((p) => ({
+                        ...p,
+                        approvalStatus: "rejected",
+                        appointmentStatus: "cancelled",
+                      }))
+                    }
+                    className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-red-600 transition-transform active:scale-95 dark:text-red-400"
+                  >
+                    Reject
+                  </button>
+                </div>
+              ) : null}
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -295,7 +346,7 @@ export default function EditAppointmentModal({
                       disabled={!rescheduleDate || !rescheduleTime || submitting}
                       onClick={() => {
                         if (!rescheduleDate || !rescheduleTime) return;
-                        const next = applyReschedule(draft, rescheduleDate, rescheduleTime);
+                        const next = applyReschedule(draft, rescheduleDate, rescheduleTime, timeZone);
                         setDraft(next);
                       }}
                     >
@@ -368,16 +419,22 @@ export default function EditAppointmentModal({
                       if (appointment.startAt && appointment.endAt) {
                         const nextStartAt = draft.startAt ?? appointment.startAt;
                         const nextEndAt = draft.endAt ?? appointment.endAt;
+                        const hasTimeChange =
+                          nextStartAt !== appointment.startAt || nextEndAt !== appointment.endAt;
+                        const body: Record<string, unknown> = {
+                          appointmentType: draft.appointmentType ?? appointment.appointmentType,
+                          status: draft.appointmentStatus ?? appointment.appointmentStatus,
+                          note: draft.notes ?? "",
+                        };
+                        if (hasTimeChange) {
+                          body.startAt = nextStartAt;
+                          body.endAt = nextEndAt;
+                        }
                         const res = await fetch(`/api/v1/admin/appointments/${appointment.sessionId}`, {
                           method: "PUT",
                           cache: "no-store",
                           headers: { "content-type": "application/json" },
-                          body: JSON.stringify({
-                            startAt: nextStartAt,
-                            endAt: nextEndAt,
-                            appointmentType: draft.appointmentType ?? appointment.appointmentType,
-                            note: draft.notes ?? "",
-                          }),
+                          body: JSON.stringify(body),
                         });
                         const json = (await res.json()) as any;
                         if (!res.ok || json?.status !== "success") {
@@ -408,10 +465,14 @@ function applyReschedule(
   appt: AdminEditableAppointment,
   isoDate: string,
   isoTime: string,
+  timeZone: string,
 ): AdminEditableAppointment {
   const [y, m, d] = isoDate.split("-").map((x) => Number(x));
-  const [hh, mm] = isoTime.split(":").map((x) => Number(x));
-  const start = new Date(y, (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0, 0, 0);
+  const start = zonedLocalYmdTimeToUtc(
+    { year: y ?? 0, month: m ?? 1, day: d ?? 1 },
+    isoTime,
+    timeZone,
+  );
   const existingStart = appt.startAt ? new Date(appt.startAt) : null;
   const existingEnd = appt.endAt ? new Date(appt.endAt) : null;
   const durMs =
@@ -420,14 +481,12 @@ function applyReschedule(
       : 60 * 60000;
   const end = new Date(start.getTime() + durMs);
 
-  const dateLine = start
-    .toLocaleDateString("en-US", { day: "2-digit", month: "short" })
-    .toUpperCase();
-  const dow = start.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
-
-  const fmtTime = (x: Date) =>
-    x.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(" ", "");
-  const timeRange = `${fmtTime(start)} – ${fmtTime(end)}`;
+  const dateLine = formatDateInTimeZone(start, timeZone, {
+    day: "2-digit",
+    month: "short",
+  }).toUpperCase();
+  const dow = formatDateInTimeZone(start, timeZone, { weekday: "short" }).toUpperCase();
+  const timeRange = `${formatTimeInTimeZone(start, timeZone)} – ${formatTimeInTimeZone(end, timeZone)}`;
 
   return {
     ...appt,

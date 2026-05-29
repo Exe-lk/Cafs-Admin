@@ -6,6 +6,23 @@ import CreateAppointmentModal, {
   type CreateAppointmentInitialSchedule,
 } from "@/components/admin/CreateAppointmentModal";
 import EditAppointmentModal, { type AdminEditableAppointment } from "@/components/admin/EditAppointmentModal";
+import {
+  addDaysToYMD,
+  formatDateInTimeZone,
+  formatTimeInTimeZone,
+  getHourInTimeZone,
+  getYMDInTimeZone,
+  normalizeTimeZone,
+  parseDbUtcTimestamp,
+  sameYMD,
+  shiftAnchorInTimeZone,
+  shiftAnchorMonthsInTimeZone,
+  startOfWeekMondayYMD,
+  type YMD,
+  wallClockDateToYMD,
+  ymdToWallClockDate,
+  zonedLocalYmdTimeToUtc,
+} from "@/lib/timezone";
 
 const TIME_LABELS = Array.from({ length: 24 }, (_, i) => {
   if (i === 0) return "12 AM";
@@ -18,14 +35,22 @@ type CalendarView = "day" | "week" | "month";
 
 type CalEvent = {
   id: string;
-  start: Date;
-  end?: Date;
+  startUtc: Date;
+  endUtc: Date;
   title: string;
   subtitle: string;
   variant: "therapy" | "neutral";
   durationMin?: number;
   proofUrl?: string;
   approvalStatus?: "pending" | "accepted" | "rejected";
+  appointmentStatus?:
+    | "pending_payment"
+    | "pending_confirmation"
+    | "confirmed"
+    | "cancelled"
+    | "completed"
+    | "no_show"
+    | "expired";
 };
 
 type ApiEnvelope<T> = {
@@ -37,56 +62,42 @@ type ApiEnvelope<T> = {
   errors?: Array<{ field: string; message: string }>;
 };
 
-function startOfWeekMonday(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(12, 0, 0, 0);
-  const day = x.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  x.setDate(x.getDate() + diff);
-  return x;
-}
-
-function addDays(d: Date, n: number): Date {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
-
-function sameDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
-function formatWeekHeader(weekStart: Date): string {
-  const weekEnd = addDays(weekStart, 6);
-  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short" });
-  const yEnd = weekEnd.getFullYear();
-  if (weekStart.getMonth() === weekEnd.getMonth()) {
+function formatWeekHeader(weekStartYmd: YMD, weekEndYmd: YMD, timeZone: string): string {
+  const weekStart = ymdToWallClockDate(weekStartYmd);
+  const weekEnd = ymdToWallClockDate(weekEndYmd);
+  const fmt = (d: Date) => formatDateInTimeZone(d, timeZone, { month: "short" });
+  const yEnd = weekEndYmd.year;
+  if (weekStartYmd.month === weekEndYmd.month) {
     return `${fmt(weekStart)} ${yEnd}`;
   }
-  const yStart = weekStart.getFullYear();
+  const yStart = weekStartYmd.year;
   if (yStart !== yEnd) {
     return `${fmt(weekStart)} ${yStart} - ${fmt(weekEnd)} ${yEnd}`;
   }
   return `${fmt(weekStart)} - ${fmt(weekEnd)} ${yEnd}`;
 }
 
-function rangeForView(view: CalendarView, anchor: Date, weekStart: Date) {
+function rangeForView(view: CalendarView, anchor: Date, weekStartYmd: YMD, timeZone: string) {
   if (view === "day") {
-    const from = new Date(anchor);
-    from.setHours(0, 0, 0, 0);
-    const to = new Date(from);
-    to.setDate(to.getDate() + 1);
-    return { from, to };
+    const ymd = getYMDInTimeZone(anchor, timeZone);
+    return {
+      from: zonedLocalYmdTimeToUtc(ymd, "00:00", timeZone),
+      to: zonedLocalYmdTimeToUtc(addDaysToYMD(ymd, 1), "00:00", timeZone),
+    };
   }
   if (view === "week") {
-    const from = new Date(weekStart);
-    from.setHours(0, 0, 0, 0);
-    const to = addDays(from, 7);
-    return { from, to };
+    return {
+      from: zonedLocalYmdTimeToUtc(weekStartYmd, "00:00", timeZone),
+      to: zonedLocalYmdTimeToUtc(addDaysToYMD(weekStartYmd, 7), "00:00", timeZone),
+    };
   }
-  // Month view currently doesn't render time grid; keep a safe default.
-  const from = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-  const to = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1);
+  const ymd = getYMDInTimeZone(anchor, timeZone);
+  const from = zonedLocalYmdTimeToUtc({ year: ymd.year, month: ymd.month, day: 1 }, "00:00", timeZone);
+  const nextMonth =
+    ymd.month === 12
+      ? { year: ymd.year + 1, month: 1, day: 1 }
+      : { year: ymd.year, month: ymd.month + 1, day: 1 };
+  const to = zonedLocalYmdTimeToUtc(nextMonth, "00:00", timeZone);
   return { from, to };
 }
 
@@ -94,6 +105,15 @@ function titleForAppointmentType(t: string | null) {
   if (t === "in_person") return "In-person appointment";
   if (t === "online") return "Online appointment";
   return "Appointment";
+}
+
+function approvalStatusForAppointmentStatus(
+  status: string,
+): "pending" | "accepted" | "rejected" {
+  if (status === "pending_payment" || status === "pending_confirmation") return "pending";
+  if (status === "confirmed" || status === "completed") return "accepted";
+  if (status === "cancelled" || status === "no_show" || status === "expired") return "rejected";
+  return "pending";
 }
 
 function pad2(n: number) {
@@ -109,8 +129,19 @@ function slotToInitialSchedule(colDate: Date, hour: number): CreateAppointmentIn
   };
 }
 
-export default function AdminCalendarHome({ therapistId }: { therapistId?: string }) {
+export default function AdminCalendarHome({
+  therapistId,
+  therapistTimezone,
+}: {
+  therapistId?: string;
+  therapistTimezone?: string;
+}) {
+  const [timeZone, setTimeZone] = useState(() => normalizeTimeZone(therapistTimezone));
   const [view, setView] = useState<CalendarView>("week");
+
+  useEffect(() => {
+    setTimeZone(normalizeTimeZone(therapistTimezone));
+  }, [therapistTimezone]);
   const [anchor, setAnchor] = useState(() => new Date());
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitialSchedule, setCreateInitialSchedule] = useState<CreateAppointmentInitialSchedule | null>(null);
@@ -120,11 +151,12 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const weekStart = useMemo(() => startOfWeekMonday(anchor), [anchor]);
+  const weekStartYmd = useMemo(() => startOfWeekMondayYMD(anchor, timeZone), [anchor, timeZone]);
+  const weekEndYmd = useMemo(() => addDaysToYMD(weekStartYmd, 6), [weekStartYmd]);
 
   const headerTitle = useMemo(() => {
     if (view === "day") {
-      return anchor.toLocaleDateString("en-US", {
+      return formatDateInTimeZone(anchor, timeZone, {
         weekday: "short",
         month: "short",
         day: "numeric",
@@ -132,19 +164,21 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
       });
     }
     if (view === "month") {
-      return anchor.toLocaleDateString("en-US", {
+      return formatDateInTimeZone(anchor, timeZone, {
         month: "long",
         year: "numeric",
       });
     }
-    return formatWeekHeader(weekStart);
-  }, [anchor, view, weekStart]);
+    return formatWeekHeader(weekStartYmd, weekEndYmd, timeZone);
+  }, [anchor, timeZone, view, weekEndYmd, weekStartYmd]);
 
   const dayColumns = useMemo(() => {
-    if (view === "day") return [anchor];
-    if (view === "week") return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    if (view === "day") return [ymdToWallClockDate(getYMDInTimeZone(anchor, timeZone))];
+    if (view === "week") {
+      return Array.from({ length: 7 }, (_, i) => ymdToWallClockDate(addDaysToYMD(weekStartYmd, i)));
+    }
     return [];
-  }, [anchor, view, weekStart]);
+  }, [anchor, timeZone, view, weekStartYmd]);
 
   const [events, setEvents] = useState<CalEvent[]>([]);
 
@@ -156,7 +190,7 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
       return;
     }
 
-    const { from, to } = rangeForView(view, anchor, weekStart);
+    const { from, to } = rangeForView(view, anchor, weekStartYmd, timeZone);
     const sp = new URLSearchParams();
     sp.set("from", from.toISOString());
     sp.set("to", to.toISOString());
@@ -174,6 +208,7 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
           signal: ac.signal,
         });
         const json = (await res.json()) as ApiEnvelope<{
+          therapistTimezone?: string;
           items: Array<{
             therapistId: string;
             type: "appointment";
@@ -182,25 +217,34 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
             endAt: string;
             appointmentType: "online" | "in_person";
             status: string;
+            proofUrl?: string | null;
           }>;
         }>;
-
         if (!res.ok || json.status !== "success" || !json.data) {
           throw new Error(json.message || `Failed to load calendar (HTTP ${res.status})`);
         }
 
-        const nextEvents: CalEvent[] = json.data.items.map((it) => {
-          const start = new Date(it.startAt);
-          const end = new Date(it.endAt);
-          return {
+        if (json.data.therapistTimezone) {
+          setTimeZone(normalizeTimeZone(json.data.therapistTimezone));
+        }
+
+        const nextEvents: CalEvent[] = [];
+        for (const it of json.data.items) {
+          const startUtc = parseDbUtcTimestamp(it.startAt);
+          const endUtc = parseDbUtcTimestamp(it.endAt);
+          if (!startUtc || !endUtc) continue;
+          nextEvents.push({
             id: it.appointmentId,
-            start,
-            end,
+            startUtc,
+            endUtc,
             title: titleForAppointmentType(it.appointmentType),
             subtitle: it.status,
             variant: "therapy",
-          };
-        });
+            proofUrl: it.proofUrl ?? undefined,
+            approvalStatus: approvalStatusForAppointmentStatus(it.status),
+            appointmentStatus: it.status as CalEvent["appointmentStatus"],
+          });
+        }
 
         setEvents(nextEvents);
       } catch (e) {
@@ -213,33 +257,24 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
     })();
 
     return () => ac.abort();
-  }, [anchor, therapistId, view, weekStart, reloadKey]);
+  }, [anchor, therapistId, timeZone, view, weekStartYmd, reloadKey]);
 
-  const today = new Date();
-  today.setHours(12, 0, 0, 0);
+  const todayYmd = useMemo(() => getYMDInTimeZone(new Date(), timeZone), [timeZone]);
 
   function onToday() {
     setAnchor(new Date());
   }
 
   function onPrev() {
-    if (view === "week") setAnchor(addDays(anchor, -7));
-    else if (view === "day") setAnchor(addDays(anchor, -1));
-    else {
-      const x = new Date(anchor);
-      x.setMonth(x.getMonth() - 1);
-      setAnchor(x);
-    }
+    if (view === "week") setAnchor(shiftAnchorInTimeZone(anchor, -7, timeZone));
+    else if (view === "day") setAnchor(shiftAnchorInTimeZone(anchor, -1, timeZone));
+    else setAnchor(shiftAnchorMonthsInTimeZone(anchor, -1, timeZone));
   }
 
   function onNext() {
-    if (view === "week") setAnchor(addDays(anchor, 7));
-    else if (view === "day") setAnchor(addDays(anchor, 1));
-    else {
-      const x = new Date(anchor);
-      x.setMonth(x.getMonth() + 1);
-      setAnchor(x);
-    }
+    if (view === "week") setAnchor(shiftAnchorInTimeZone(anchor, 7, timeZone));
+    else if (view === "day") setAnchor(shiftAnchorInTimeZone(anchor, 1, timeZone));
+    else setAnchor(shiftAnchorMonthsInTimeZone(anchor, 1, timeZone));
   }
 
   const gridColsClass = view === "day" ? "grid-cols-[80px_1fr]" : "grid-cols-[80px_repeat(7,1fr)]";
@@ -253,6 +288,7 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
           setCreateInitialSchedule(null);
         }}
         therapistId={therapistId}
+        therapistTimezone={timeZone}
         initialSchedule={createInitialSchedule}
         onCreated={() => {
           setReloadKey((k) => k + 1);
@@ -261,6 +297,7 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
       {editOpen && selected ? (
         <EditAppointmentModal
           appointment={selected}
+          therapistTimezone={timeZone}
           onClose={() => setEditOpen(false)}
           onDelete={({ sessionId }) => {
             setEvents((prev) => prev.filter((e) => e.id !== sessionId));
@@ -378,7 +415,8 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
           {view === "month" ? (
             <MonthGrid
               anchor={anchor}
-              today={today}
+              timeZone={timeZone}
+              todayYmd={todayYmd}
               onSelectDay={(d) => {
                 setAnchor(d);
                 setView("day");
@@ -388,8 +426,16 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
             <div className={`grid min-h-full min-w-[800px] ${gridColsClass}`}>
               <div className="sticky top-0 z-20 border-b border-mgmt-outline-variant/10 bg-mgmt-surface" />
               {dayColumns.map((colDate) => {
-                const isToday = sameDay(colDate, today);
-                const dow = colDate.toLocaleDateString("en-US", { weekday: "short" });
+                const colYmd = {
+                  year: colDate.getFullYear(),
+                  month: colDate.getMonth() + 1,
+                  day: colDate.getDate(),
+                };
+                const isToday =
+                  colYmd.year === todayYmd.year &&
+                  colYmd.month === todayYmd.month &&
+                  colYmd.day === todayYmd.day;
+                const dow = formatDateInTimeZone(colDate, timeZone, { weekday: "short" });
                 const dom = colDate.getDate();
                 return (
                   <div
@@ -419,6 +465,7 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
                   key={timeLabel}
                   timeLabel={timeLabel}
                   hour={hour}
+                  timeZone={timeZone}
                   dayColumns={dayColumns}
                   events={events}
                   onEmptySlot={(colDate) => {
@@ -426,17 +473,17 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
                     setCreateOpen(true);
                   }}
                   onSelectEvent={(ev) => {
-                    const dateLine = ev.start
-                      .toLocaleDateString("en-US", { day: "2-digit", month: "short" })
-                      .toUpperCase();
-                    const dow = ev.start.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
-                    const fmtTime = (d: Date) =>
-                      d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(" ", "");
-                    const end = ev.end ?? new Date(ev.start.getTime() + (ev.durationMin ?? 60) * 60000);
-                    const timeRange = `${fmtTime(ev.start)} – ${fmtTime(end)}`;
+                    const dateLine = formatDateInTimeZone(ev.startUtc, timeZone, {
+                      day: "2-digit",
+                      month: "short",
+                    }).toUpperCase();
+                    const dow = formatDateInTimeZone(ev.startUtc, timeZone, {
+                      weekday: "short",
+                    }).toUpperCase();
+                    const timeRange = `${formatTimeInTimeZone(ev.startUtc, timeZone)} – ${formatTimeInTimeZone(ev.endUtc, timeZone)}`;
 
                     setSelected({
-                      dayId: weekStart.toISOString(),
+                      dayId: zonedLocalYmdTimeToUtc(weekStartYmd, "12:00", timeZone).toISOString(),
                       sessionId: ev.id,
                       dateLine: `${dateLine}, ${dow}`,
                       timeRange,
@@ -446,8 +493,9 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
                       videoLink: "",
                       proofUrl: ev.proofUrl,
                       approvalStatus: ev.approvalStatus ?? "pending",
-                      startAt: ev.start.toISOString(),
-                      endAt: end.toISOString(),
+                      appointmentStatus: ev.appointmentStatus,
+                      startAt: ev.startUtc.toISOString(),
+                      endAt: ev.endUtc.toISOString(),
                     });
                     setEditOpen(true);
                   }}
@@ -464,6 +512,7 @@ export default function AdminCalendarHome({ therapistId }: { therapistId?: strin
 function TimeRow({
   timeLabel,
   hour,
+  timeZone,
   dayColumns,
   events,
   onEmptySlot,
@@ -471,6 +520,7 @@ function TimeRow({
 }: {
   timeLabel: string;
   hour: number;
+  timeZone: string;
   dayColumns: Date[];
   events: CalEvent[];
   onEmptySlot: (colDate: Date) => void;
@@ -482,7 +532,11 @@ function TimeRow({
         {timeLabel}
       </div>
       {dayColumns.map((colDate) => {
-        const cellEvents = events.filter((ev) => sameDay(ev.start, colDate) && ev.start.getHours() === hour);
+        const colYmd = wallClockDateToYMD(colDate);
+        const cellEvents = events.filter((ev) => {
+          const evYmd = getYMDInTimeZone(ev.startUtc, timeZone);
+          return sameYMD(evYmd, colYmd) && getHourInTimeZone(ev.startUtc, timeZone) === hour;
+        });
         return (
           <div
             key={`${colDate.toISOString()}-${hour}`}
@@ -545,18 +599,21 @@ function EventBlock({ ev, onClick }: { ev: CalEvent; onClick: () => void }) {
 
 function MonthGrid({
   anchor,
-  today,
+  timeZone,
+  todayYmd,
   onSelectDay,
 }: {
   anchor: Date;
-  today: Date;
+  timeZone: string;
+  todayYmd: YMD;
   onSelectDay: (d: Date) => void;
 }) {
-  const year = anchor.getFullYear();
-  const month = anchor.getMonth();
-  const first = new Date(year, month, 1);
+  const anchorYmd = getYMDInTimeZone(anchor, timeZone);
+  const year = anchorYmd.year;
+  const month = anchorYmd.month;
+  const first = ymdToWallClockDate({ year, month, day: 1 });
   const startPad = first.getDay() === 0 ? 6 : first.getDay() - 1;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInMonth = new Date(year, month, 0).getDate();
   const cells: (number | null)[] = [];
   for (let i = 0; i < startPad; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
@@ -574,8 +631,9 @@ function MonthGrid({
         <div className="grid grid-cols-7 gap-1">
           {cells.map((day, idx) => {
             if (day === null) return <div key={`empty-${idx}`} className="aspect-square" />;
-            const d = new Date(year, month, day);
-            const isToday = sameDay(d, today);
+            const d = zonedLocalYmdTimeToUtc({ year, month, day }, "12:00", timeZone);
+            const isToday =
+              year === todayYmd.year && month === todayYmd.month && day === todayYmd.day;
             return (
               <button
                 key={day}
