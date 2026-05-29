@@ -630,6 +630,19 @@ export default function AdminCustomerDetail({
             onUpdateCustomer({ ...customer, appointmentDays: updatedDays });
             setEditingAppt(null);
           }}
+          onRejected={({ dayId, sessionId }) => {
+            const updatedDays = (customer.appointmentDays ?? [])
+              .map((day) => {
+                if (day.kind !== "list") return day;
+                if (day.id !== dayId) return day;
+                const nextSessions = day.sessions.filter((s) => s.id !== sessionId);
+                if (nextSessions.length === 0) return null;
+                return { ...day, sessions: nextSessions };
+              })
+              .filter((x): x is NonNullable<typeof x> => Boolean(x));
+            onUpdateCustomer({ ...customer, appointmentDays: updatedDays });
+            setEditingAppt(null);
+          }}
         />
       ) : null}
     </div>

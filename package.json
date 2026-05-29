@@ -16,6 +16,7 @@
     "prisma": "^7.8.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "resend": "^6.12.4",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-react": "^5.32.5"
   },

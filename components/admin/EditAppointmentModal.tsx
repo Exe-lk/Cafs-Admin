@@ -40,20 +40,30 @@ export type AdminEditableAppointment = {
   appointmentType?: "online" | "in_person";
 };
 
+const MIN_REJECT_REASON_LEN = 3;
+
 export default function EditAppointmentModal({
   appointment,
   therapistTimezone,
   onClose,
   onSave,
   onDelete,
+  onRejected,
 }: {
   appointment: AdminEditableAppointment;
   therapistTimezone?: string;
   onClose: () => void;
   onSave: (next: AdminEditableAppointment) => void;
   onDelete: (args: { dayId: string; sessionId: string }) => void;
+  onRejected?: (args: {
+    dayId: string;
+    sessionId: string;
+    emailSent: boolean;
+    emailError?: string;
+  }) => void;
 }) {
   const titleId = useId();
+  const rejectTitleId = useId();
   const timeZone = normalizeTimeZone(therapistTimezone);
   const [draft, setDraft] = useState<AdminEditableAppointment>(appointment);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
@@ -61,14 +71,28 @@ export default function EditAppointmentModal({
   const [rescheduleTime, setRescheduleTime] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectSubmitting, setRejectSubmitting] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
+
+  const isApiBacked = Boolean(appointment.startAt && appointment.endAt);
+  const busy = submitting || rejectSubmitting;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (rejectOpen) {
+        setRejectOpen(false);
+        setRejectReason("");
+        setRejectError(null);
+        return;
+      }
+      onClose();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [onClose, rejectOpen]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -85,7 +109,73 @@ export default function EditAppointmentModal({
     setRescheduleTime("");
     setSubmitting(false);
     setErrorMsg(null);
+    setRejectOpen(false);
+    setRejectReason("");
+    setRejectSubmitting(false);
+    setRejectError(null);
   }, [appointment]);
+
+  const canConfirmReject =
+    rejectReason.trim().length >= MIN_REJECT_REASON_LEN && !rejectSubmitting;
+
+  async function confirmReject() {
+    if (!canConfirmReject) return;
+    const reason = rejectReason.trim();
+    setRejectSubmitting(true);
+    setRejectError(null);
+    setErrorMsg(null);
+
+    try {
+      if (isApiBacked) {
+        const res = await fetch(
+          `/api/v1/admin/appointments/${appointment.sessionId}/reject`,
+          {
+            method: "POST",
+            cache: "no-store",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ reason }),
+          },
+        );
+        const json = (await res.json()) as {
+          status?: string;
+          message?: string;
+          data?: { emailSent?: boolean; emailError?: string };
+        };
+        if (!res.ok || json.status !== "success") {
+          throw new Error(json.message || `Reject failed (HTTP ${res.status})`);
+        }
+        const emailSent = Boolean(json.data?.emailSent);
+        const emailError =
+          typeof json.data?.emailError === "string" ? json.data.emailError : undefined;
+        onRejected?.({
+          dayId: appointment.dayId,
+          sessionId: appointment.sessionId,
+          emailSent,
+          emailError,
+        });
+        onClose();
+        return;
+      }
+
+      const next: AdminEditableAppointment = {
+        ...draft,
+        approvalStatus: "rejected",
+        appointmentStatus: "cancelled",
+      };
+      onSave(next);
+      onRejected?.({
+        dayId: appointment.dayId,
+        sessionId: appointment.sessionId,
+        emailSent: false,
+        emailError: "Email is only sent for calendar appointments",
+      });
+      onClose();
+    } catch (e) {
+      setRejectError(e instanceof Error ? e.message : "Failed to reject appointment");
+    } finally {
+      setRejectSubmitting(false);
+    }
+  }
 
   const canSave = useMemo(() => {
     return Boolean(
@@ -173,14 +263,13 @@ export default function EditAppointmentModal({
                   </button>
                   <button
                     type="button"
-                    onClick={() =>
-                      setDraft((p) => ({
-                        ...p,
-                        approvalStatus: "rejected",
-                        appointmentStatus: "cancelled",
-                      }))
-                    }
-                    className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-red-600 transition-transform active:scale-95 dark:text-red-400"
+                    disabled={busy}
+                    onClick={() => {
+                      setRejectReason("");
+                      setRejectError(null);
+                      setRejectOpen(true);
+                    }}
+                    className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-red-600 transition-transform active:scale-95 disabled:opacity-40 dark:text-red-400"
                   >
                     Reject
                   </button>
@@ -343,7 +432,7 @@ export default function EditAppointmentModal({
                     <button
                       type="button"
                       className="sm:col-span-2 rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white transition-transform active:scale-95 disabled:opacity-40"
-                      disabled={!rescheduleDate || !rescheduleTime || submitting}
+                      disabled={!rescheduleDate || !rescheduleTime || busy}
                       onClick={() => {
                         if (!rescheduleDate || !rescheduleTime) return;
                         const next = applyReschedule(draft, rescheduleDate, rescheduleTime, timeZone);
@@ -365,7 +454,7 @@ export default function EditAppointmentModal({
                 "rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors",
                 "border-red-500/30 bg-red-500/10 text-red-600 hover:bg-red-500/15 dark:text-red-400",
               )}
-              disabled={submitting}
+              disabled={busy}
               onClick={() => {
                 const ok = window.confirm("Delete this appointment? This action cannot be undone.");
                 if (!ok) return;
@@ -408,7 +497,7 @@ export default function EditAppointmentModal({
               <button
                 type="button"
                 className="rounded-xl bg-black px-7 py-2.5 text-sm font-bold text-white transition-transform active:scale-95 disabled:opacity-40"
-                disabled={!canSave || submitting}
+                disabled={!canSave || busy}
                 onClick={() => {
                   if (!canSave) return;
                   setSubmitting(true);
@@ -457,6 +546,79 @@ export default function EditAppointmentModal({
           </div>
         </div>
       </div>
+
+      {rejectOpen ? (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Close reject dialog"
+            className="absolute inset-0 bg-mgmt-inverse-surface/20"
+            onClick={() => {
+              if (rejectSubmitting) return;
+              setRejectOpen(false);
+              setRejectReason("");
+              setRejectError(null);
+            }}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={rejectTitleId}
+            className="relative z-[111] w-full max-w-md rounded-xl bg-white p-6 shadow-[0_10px_40px_-10px_rgba(47,51,52,0.2)]"
+          >
+            <h4 id={rejectTitleId} className="text-base font-semibold text-mgmt-on-surface">
+              Reject appointment
+            </h4>
+            <p className="mt-1 text-sm text-mgmt-on-surface-variant">
+              The appointment will be cancelled and the time slot freed. The client will receive
+              your reason by email{isApiBacked ? "" : " (calendar appointments only)"}.
+            </p>
+            {rejectError ? (
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {rejectError}
+              </div>
+            ) : null}
+            <label className="mt-4 block text-[11px] font-semibold text-mgmt-on-surface-variant">
+              Reason for rejection
+            </label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              disabled={rejectSubmitting}
+              className="mt-1 min-h-28 w-full resize-none rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:opacity-60"
+              placeholder="Explain why this appointment cannot be confirmed…"
+              autoFocus
+            />
+            <p className="mt-1 text-xs text-mgmt-on-surface-variant">
+              At least {MIN_REJECT_REASON_LEN} characters required.
+            </p>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={rejectSubmitting}
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-mgmt-on-surface-variant hover:bg-mgmt-surface-container-low disabled:opacity-40"
+                onClick={() => {
+                  setRejectOpen(false);
+                  setRejectReason("");
+                  setRejectError(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!canConfirmReject}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white transition-transform active:scale-95 disabled:opacity-40"
+                onClick={() => {
+                  void confirmReject();
+                }}
+              >
+                {rejectSubmitting ? "Rejecting…" : "Confirm reject"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
