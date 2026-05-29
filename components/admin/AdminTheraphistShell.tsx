@@ -10,6 +10,7 @@ import EditTherapistProfileModal, {
 import { AdminTherapistProvider } from "@/components/admin/AdminTherapistContext";
 import CreateTherapistModal from "@/components/admin/CreateTherapistModal";
 import { type AdminTherapistListItem } from "@/components/admin/useAdminTherapists";
+import { DEFAULT_THERAPIST_TIMEZONE, normalizeTimeZone } from "@/lib/timezone";
 
 export default function AdminTheraphistShell({ children }: { children: React.ReactNode }) {
   const [therapists, setTherapists] = useState<AdminTherapistListItem[]>([]);
@@ -44,6 +45,7 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
           email: String(t.profiles?.email ?? ""),
           specialty: String(t.specialties ?? t.title ?? "").trim() || undefined,
           status: t.visibility === "private" ? "Inactive" : "Active",
+          timezone: normalizeTimeZone(t.timezone ?? DEFAULT_THERAPIST_TIMEZONE),
         }));
 
         const nextProfiles: Record<string, AdminTherapistProfile> = {};
@@ -360,6 +362,7 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
                 email: draft.email,
                 specialty: draft.specialization,
                 status: draft.hidden ? "Inactive" : "Active",
+                timezone: normalizeTimeZone(draft.timezone),
               },
               ...prev,
             ]);

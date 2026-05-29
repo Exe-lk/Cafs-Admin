@@ -59,7 +59,10 @@ export default function TheraphistHomePage() {
       <div className="hidden w-72 shrink-0 lg:block" aria-hidden />
 
       <div className="min-w-0 flex-1">
-        <AdminCalendarHome therapistId={selected?.id} />
+        <AdminCalendarHome
+          therapistId={selected?.id}
+          therapistTimezone={selected?.timezone}
+        />
       </div>
     </div>
   );

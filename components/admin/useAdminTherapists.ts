@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { DEFAULT_THERAPIST_TIMEZONE, normalizeTimeZone } from "@/lib/timezone";
 
 export type AdminTherapistListItem = {
   id: string;
@@ -6,6 +7,7 @@ export type AdminTherapistListItem = {
   email: string;
   specialty?: string;
   status?: "Active" | "Inactive";
+  timezone: string;
 };
 
 type ApiEnvelope<T> = {
@@ -20,6 +22,7 @@ type TherapistsApiItem = {
   therapist_id: string;
   visibility: "public" | "private";
   specialties: string | null;
+  timezone?: string | null;
   profiles?: { full_name?: string | null; email?: string | null } | null;
 };
 
@@ -70,6 +73,7 @@ export function useAdminTherapists() {
         email,
         specialty,
         status: t.visibility === "private" ? "Inactive" : "Active",
+        timezone: normalizeTimeZone(t.timezone ?? DEFAULT_THERAPIST_TIMEZONE),
       };
     });
   }, [items]);

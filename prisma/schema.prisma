@@ -142,6 +142,8 @@ model Therapist {
   profilePhotoUrl       String?             @map("profile_photo_url")
   timezone              String              @default("Asia/Colombo")
   isAcceptingNewClients Boolean             @default(true) @map("is_accepting_new_clients")
+  /// AES-256-GCM ciphertext for Google Calendar OAuth refresh token (see lib/crypto/googleRefreshToken.ts).
+  googleRefreshTokenEncrypted String?       @map("google_refresh_token_encrypted")
   updatedAt             DateTime            @map("updated_at")
 
   profile Profile @relation(fields: [therapistId], references: [userId])

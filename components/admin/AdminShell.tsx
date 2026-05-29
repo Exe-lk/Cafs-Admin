@@ -14,7 +14,7 @@ function titleForPath(pathname: string | null): string {
   if (!pathname) return "Dashboard";
   if (pathname === "/admin") return "Calendar";
   if (pathname.startsWith("/admin/services")) return "Services";
-  if (pathname.startsWith("/admin/connect")) return "Connect";
+  // if (pathname.startsWith("/admin/connect")) return "Connect";
   if (pathname.startsWith("/admin/customers")) return "Customers";
   if (pathname.startsWith("/admin/theraphist")) return "Theraphist";
   if (pathname.startsWith("/admin/settings")) return "Settings";
