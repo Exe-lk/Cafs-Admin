@@ -230,6 +230,7 @@ export default function AdminCalendarHome({
 
         const nextEvents: CalEvent[] = [];
         for (const it of json.data.items) {
+          if (it.status === "cancelled" || it.status === "expired") continue;
           const startUtc = parseDbUtcTimestamp(it.startAt);
           const endUtc = parseDbUtcTimestamp(it.endAt);
           if (!startUtc || !endUtc) continue;
@@ -302,6 +303,16 @@ export default function AdminCalendarHome({
           onDelete={({ sessionId }) => {
             setEvents((prev) => prev.filter((e) => e.id !== sessionId));
             setReloadKey((k) => k + 1);
+          }}
+          onRejected={({ sessionId, emailSent, emailError }) => {
+            setEvents((prev) => prev.filter((e) => e.id !== sessionId));
+            setReloadKey((k) => k + 1);
+            setEditOpen(false);
+            if (!emailSent && emailError) {
+              setErrorMsg(
+                `Appointment cancelled, but the client could not be emailed: ${emailError}`,
+              );
+            }
           }}
           onSave={(next) => {
             setSelected(next);

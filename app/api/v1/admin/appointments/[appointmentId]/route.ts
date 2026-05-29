@@ -19,6 +19,7 @@ type PutBody = {
   startAt?: string;
   endAt?: string;
   note?: string;
+  cancelReason?: string;
 };
 
 export async function PUT(
@@ -46,7 +47,15 @@ export async function PUT(
   if (typeof body.therapistId === "string") payload.therapist_id = body.therapistId;
   if (typeof body.serviceId === "string") payload.service_id = body.serviceId;
   if (body.appointmentType) payload.appointment_type = body.appointmentType;
-  if (body.status) payload.status = body.status;
+  if (body.status) {
+    payload.status = body.status;
+    if (body.status === "cancelled") {
+      payload.cancelled_at = new Date().toISOString();
+    }
+  }
+  if (typeof body.cancelReason === "string" && body.cancelReason.trim()) {
+    payload.cancel_reason = body.cancelReason.trim();
+  }
   if (typeof body.startAt === "string") {
     const d = parseIsoDateParam(body.startAt);
     if (!d) return err("Invalid startAt", 400);
