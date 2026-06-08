@@ -1,5 +1,5 @@
-import AdminServicesDashboard from "@/components/admin/AdminServicesDashboard";
+import AdminServicesHome from "@/components/admin/AdminServicesHome";
 
-export default function TheraphistServicesPage() {
-  return <AdminServicesDashboard />;
+export default function AdminServicesPage() {
+  return <AdminServicesHome />;
 }

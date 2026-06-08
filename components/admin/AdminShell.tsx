@@ -13,6 +13,7 @@ function cx(...classes: Array<string | false | null | undefined>) {
 function titleForPath(pathname: string | null): string {
   if (!pathname) return "Dashboard";
   if (pathname === "/admin") return "Calendar";
+  if (pathname.startsWith("/admin/service-types")) return "Service types";
   if (pathname.startsWith("/admin/services")) return "Services";
   // if (pathname.startsWith("/admin/connect")) return "Connect";
   if (pathname.startsWith("/admin/customers")) return "Customers";
@@ -27,14 +28,14 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const title = useMemo(() => titleForPath(pathname), [pathname]);
 
   return (
-    <div className="theraphist-theme light min-h-dvh bg-mgmt-background font-sans text-mgmt-on-surface">
+    <div className="theraphist-theme light flex h-dvh flex-col overflow-hidden bg-mgmt-background font-sans text-mgmt-on-surface">
       {/* Desktop sidebar */}
       <div className="hidden md:block">
         <AdminSidebar className="fixed left-0 top-0 z-50 h-dvh w-64" />
       </div>
 
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-50 flex h-14 items-center gap-3 border-b border-mgmt-outline-variant/10 bg-white/85 px-4 backdrop-blur-xl md:hidden">
+      <header className="z-50 flex h-14 shrink-0 items-center gap-3 border-b border-mgmt-outline-variant/10 bg-white/85 px-4 backdrop-blur-xl md:hidden">
         <button
           type="button"
           onClick={() => setMobileNavOpen(true)}
@@ -92,8 +93,8 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       </div>
 
       {/* Content */}
-      <div className="ml-0 flex min-h-dvh flex-col md:ml-64">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
+      <div className="ml-0 flex min-h-0 flex-1 flex-col overflow-hidden md:ml-64">
+        {children}
       </div>
     </div>
   );

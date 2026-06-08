@@ -1,13 +1,63 @@
 "use client";
-import EditServiceModal from "@/components/admin/EditServiceModal";
-import { useCallback, useEffect, useMemo, useState } from "react";
 
-type ServiceItem = {
-  id: string;
-  title: string;
-  meta: string;
+import { useCallback, useMemo, useState } from "react";
+import EditTherapistServiceModal, {
+  type EditTherapistServiceModalItem,
+} from "@/components/admin/EditTherapistServiceModal";
+
+type ServiceItem = EditTherapistServiceModalItem & {
   highlighted?: boolean;
+  therapistName: string;
 };
+
+type ServiceModalState = "closed" | "create" | ServiceItem;
+
+const PLACEHOLDER_SERVICES: ServiceItem[] = [
+  {
+    id: "svc-001",
+    title: "Couples Therapy(Online)",
+    therapistName: "Dr. Anjali Perera",
+    meta: "60 mins · Rs 4,500",
+    categoryId: "cat-couples",
+    therapistId: "th-001",
+    description: "Online couples counselling focused on communication and conflict resolution.",
+    highlighted: true,
+  },
+  {
+    id: "svc-002",
+    title: "Individual Therapy(In-person)",
+    therapistName: "Dr. Ruwan Silva",
+    meta: "50 mins · Rs 3,500",
+    categoryId: "cat-individual",
+    therapistId: "th-002",
+    description: "One-on-one in-clinic session for anxiety, stress, and emotional wellbeing.",
+    highlighted: false,
+  },
+  {
+    id: "svc-003",
+    title: "Psychological Assessment(Online)",
+    therapistName: "Ms. Nethmi Fernando",
+    meta: "90 mins · Rs 6,000",
+    categoryId: "cat-assessment",
+    therapistId: "th-003",
+    description: "Structured online assessment with follow-up recommendations.",
+    highlighted: false,
+  },
+  {
+    id: "svc-004",
+    title: "Group Session(In-person)",
+    therapistName: "Dr. Anjali Perera",
+    meta: "75 mins · Rs 2,500",
+    categoryId: "cat-group",
+    therapistId: "th-001",
+    description: "Small-group therapeutic session for peer support and guided exercises.",
+    highlighted: false,
+  },
+];
+
+function serviceDisplayTitle(service: ServiceItem) {
+  return `${service.title} by ${service.therapistName}`;
+}
 
 function ClockIcon({ className }: { className?: string }) {
   return (
@@ -43,15 +93,23 @@ function MoreIcon({ className }: { className?: string }) {
   );
 }
 
-type ServiceModalState = "closed" | "create" | ServiceItem;
+const filterSelectClass =
+  "block w-full rounded-lg border border-mgmt-outline-variant bg-mgmt-surface-container-low py-2 px-3 text-sm text-mgmt-on-surface focus:border-mgmt-primary focus:ring-2 focus:ring-mgmt-primary-container focus:outline-none sm:min-w-[200px] sm:w-auto";
 
-export default function AdminServicesDashboard() {
+export default function AdminServicesHome() {
+  const [therapistFilter, setTherapistFilter] = useState("");
   const [search, setSearch] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [serviceModal, setServiceModal] = useState<ServiceModalState>("closed");
-  const [services, setServices] = useState<ServiceItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const services = PLACEHOLDER_SERVICES;
+
+  const therapistOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const service of services) {
+      if (service.therapistId) map.set(service.therapistId, service.therapistName);
+    }
+    return Array.from(map, ([id, name]) => ({ id, name }));
+  }, [services]);
 
   const copyLink = useCallback(async (id: string, slug: string) => {
     const url = `${typeof window !== "undefined" ? window.location.origin : ""}/book/${slug}`;
@@ -65,74 +123,28 @@ export default function AdminServicesDashboard() {
   }, []);
 
   const filtered = useMemo(() => {
-    return services.filter(
-      (s) =>
-        search.trim() === "" ||
-        s.title.toLowerCase().includes(search.toLowerCase()) ||
-        s.meta.toLowerCase().includes(search.toLowerCase()),
-    );
-  }, [search, services]);
-
-  const reload = useCallback(() => {
-    const ac = new AbortController();
-    setLoading(true);
-    setErrorMsg(null);
-    (async () => {
-      try {
-        const res = await fetch("/api/v1/admin/services", {
-          method: "GET",
-          cache: "no-store",
-          signal: ac.signal,
-        });
-        const json = (await res.json()) as any;
-        if (!res.ok || json?.status !== "success" || !json?.data) {
-          throw new Error(json?.message || `Failed to load services (HTTP ${res.status})`);
-        }
-
-        const items = (json.data.items ?? []) as Array<any>;
-        const next: ServiceItem[] = items.map((s) => {
-          const mins = Number(s.default_duration_minutes ?? 60);
-          const price = s.base_price_lkr == null ? "Free" : `LKR ${Number(s.base_price_lkr).toLocaleString()}`;
-          return {
-            id: String(s.service_id),
-            title: String(s.name ?? "—"),
-            meta: `${mins} mins · ${price}`,
-            highlighted: Boolean(s.is_active),
-          };
-        });
-        setServices(next);
-      } catch (e) {
-        if ((e as any)?.name === "AbortError") return;
-        setErrorMsg(e instanceof Error ? e.message : "Failed to load services");
-        setServices([]);
-      } finally {
-        setLoading(false);
-      }
-    })();
-    return () => ac.abort();
-  }, []);
-
-  useEffect(() => {
-    const cleanup = reload();
-    return cleanup;
-  }, [reload]);
+    const q = search.trim().toLowerCase();
+    return services.filter((s) => {
+      if (therapistFilter && s.therapistId !== therapistFilter) return false;
+      if (!q) return true;
+      const line = serviceDisplayTitle(s).toLowerCase();
+      return line.includes(q) || s.meta.toLowerCase().includes(q);
+    });
+  }, [search, services, therapistFilter]);
 
   return (
     <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-y-auto" data-purpose="main-content">
       {serviceModal !== "closed" ? (
-        <EditServiceModal
-          key={serviceModal === "create" ? "new-service" : serviceModal.id}
+        <EditTherapistServiceModal
+          key={serviceModal === "create" ? "new-therapist-service" : serviceModal.id}
           service={serviceModal === "create" ? null : serviceModal}
           onClose={() => setServiceModal("closed")}
-          onSaved={() => {
-            setServiceModal("closed");
-            reload();
-          }}
+          onSaved={() => setServiceModal("closed")}
         />
       ) : null}
 
       <header className="sticky top-12 z-10 flex items-center justify-between bg-mgmt-surface-container-lowest px-4 py-5 sm:top-0 sm:px-6 lg:px-8 lg:py-6">
-        <h1 className="text-2xl font-bold text-mgmt-on-surface">Service types</h1>
+        <h1 className="text-2xl font-bold text-mgmt-on-surface">Services</h1>
         <div className="flex items-center gap-4">
           <button
             type="button"
@@ -161,13 +173,21 @@ export default function AdminServicesDashboard() {
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-6xl p-4 sm:p-6 lg:p-8 mt-12">
-        {errorMsg ? (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {errorMsg}
-          </div>
-        ) : null}
+      <div className="mx-auto mt-12 w-full max-w-6xl p-4 sm:p-6 lg:p-8">
         <div className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4" data-purpose="filters">
+          <select
+            value={therapistFilter}
+            onChange={(e) => setTherapistFilter(e.target.value)}
+            className={filterSelectClass}
+            aria-label="Filter by therapist"
+          >
+            <option value="">All therapists</option>
+            {therapistOptions.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
           <div className="relative min-w-0 flex-1 sm:min-w-[220px]">
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
               <svg className="h-4 w-4 text-mgmt-on-surface-variant" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -183,16 +203,13 @@ export default function AdminServicesDashboard() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="block w-full rounded-lg border border-mgmt-outline-variant bg-mgmt-surface-container-low py-2 pl-10 pr-3 text-sm text-mgmt-on-surface placeholder:text-mgmt-on-surface-variant focus:border-mgmt-primary focus:ring-2 focus:ring-mgmt-primary-container focus:outline-none"
-              placeholder="Service types"
+              placeholder="Services"
               type="search"
             />
           </div>
         </div>
 
         <div className="space-y-3" data-purpose="services-list">
-          {loading ? (
-            <p className="text-sm text-mgmt-on-surface-variant">Loading…</p>
-          ) : null}
           {filtered.map((service) => (
             <div
               key={service.id}
@@ -211,7 +228,9 @@ export default function AdminServicesDashboard() {
                   <ClockIcon className="h-8 w-8 text-mgmt-on-surface-variant" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold text-mgmt-on-surface">{service.title}</span>
+                  <span className="block text-sm font-semibold text-mgmt-on-surface">
+                    {serviceDisplayTitle(service)}
+                  </span>
                   <span className="block text-xs text-mgmt-on-surface-variant">{service.meta}</span>
                 </span>
               </button>
@@ -238,19 +257,18 @@ export default function AdminServicesDashboard() {
                 <button
                   type="button"
                   className="text-mgmt-on-surface-variant hover:text-mgmt-on-surface"
-                  aria-label={`More actions for ${service.title}`}
+                  aria-label={`More actions for ${serviceDisplayTitle(service)}`}
                 >
                   <MoreIcon className="h-5 w-5" />
                 </button>
               </div>
             </div>
           ))}
-          {filtered.length === 0 && (
+          {filtered.length === 0 ? (
             <p className="text-sm text-mgmt-on-surface-variant">No services match your search.</p>
-          )}
+          ) : null}
         </div>
       </div>
     </main>
   );
 }
-

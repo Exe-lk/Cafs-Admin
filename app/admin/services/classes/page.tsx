@@ -1,5 +1,5 @@
-import AdminClassesDashboard from "@/components/admin/AdminClassesDashboard";
+import AdminClassesHome from "@/components/admin/AdminClassesHome";
 
-export default function TheraphistServicesClassesPage() {
-  return <AdminClassesDashboard />;
+export default function AdminServicesClassesPage() {
+  return <AdminClassesHome />;
 }

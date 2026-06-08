@@ -22,7 +22,7 @@ export default function TheraphistHomePage() {
   }, [selectedId, therapists]);
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
       {/* Mobile: therapist selector */}
       <div className="sticky top-0 z-40 border-b border-mgmt-outline-variant/10 bg-white/80 px-4 py-3 backdrop-blur-xl lg:hidden">
         <div className="flex flex-col gap-2">
@@ -61,7 +61,7 @@ export default function TheraphistHomePage() {
       </div>
       <div className="hidden w-72 shrink-0 lg:block" aria-hidden />
 
-      <div className="min-w-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <AdminCalendarHome
           therapistId={selected?.id}
           therapistTimezone={selected?.timezone}

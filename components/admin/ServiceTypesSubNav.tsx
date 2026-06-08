@@ -8,13 +8,12 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-export default function ServicesSubNav() {
+export default function ServiceTypesSubNav() {
   const pathname = usePathname();
-  const onClasses = pathname?.startsWith("/admin/services/classes") ?? false;
+  const onClasses = pathname?.startsWith("/admin/service-types/classes") ?? false;
 
-  /** When on the services route, user can collapse the list; on classes route the section stays closed. */
-  const [servicesCollapsedByUser, setServicesCollapsedByUser] = useState(false);
-  const servicesOpen = !onClasses && !servicesCollapsedByUser;
+  const [serviceTypesCollapsedByUser, setServiceTypesCollapsedByUser] = useState(false);
+  const serviceTypesOpen = !onClasses && !serviceTypesCollapsedByUser;
 
   return (
     <aside
@@ -22,7 +21,7 @@ export default function ServicesSubNav() {
       data-purpose="secondary-navigation"
     >
       <div className="p-6">
-        <h2 className="text-xl font-bold text-mgmt-on-surface">Services</h2>
+        <h2 className="text-xl font-bold text-mgmt-on-surface">Service types</h2>
       </div>
       <div className="flex-1 px-4 pb-6">
         <div className="mb-4">
@@ -35,7 +34,7 @@ export default function ServicesSubNav() {
             )}
           >
             <Link
-              href="/admin/services"
+              href="/admin/service-types"
               className={cx(
                 "flex min-w-0 flex-1 items-center justify-between px-2 py-2 text-sm font-semibold",
                 onClasses
@@ -43,7 +42,7 @@ export default function ServicesSubNav() {
                   : "text-mgmt-on-surface",
               )}
             >
-              <span>All services (3)</span>
+              <span>Service types (3)</span>
               {onClasses && (
                 <svg
                   className="h-4 w-4 shrink-0"
@@ -59,13 +58,13 @@ export default function ServicesSubNav() {
             {!onClasses && (
               <button
                 type="button"
-                onClick={() => setServicesCollapsedByUser((c) => !c)}
+                onClick={() => setServiceTypesCollapsedByUser((c) => !c)}
                 className="mr-1 shrink-0 rounded p-1 text-mgmt-on-surface-variant hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface"
-                aria-expanded={servicesOpen}
-                aria-label={servicesOpen ? "Collapse services" : "Expand services"}
+                aria-expanded={serviceTypesOpen}
+                aria-label={serviceTypesOpen ? "Collapse service types" : "Expand service types"}
               >
                 <svg
-                  className={cx("h-4 w-4 transition-transform", servicesOpen && "rotate-180")}
+                  className={cx("h-4 w-4 transition-transform", serviceTypesOpen && "rotate-180")}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -76,10 +75,10 @@ export default function ServicesSubNav() {
               </button>
             )}
           </div>
-          {servicesOpen && (
+          {serviceTypesOpen && (
             <div className="mt-2 space-y-2 pl-4">
               <Link
-                href="/admin/services"
+                href="/admin/service-types"
                 className={cx(
                   "block text-sm hover:text-mgmt-on-surface",
                   !onClasses ? "font-medium text-mgmt-on-surface" : "text-mgmt-on-surface-variant",
@@ -105,7 +104,7 @@ export default function ServicesSubNav() {
                     d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                   />
                 </svg>
-                New service
+                New service type category
               </button>
             </div>
           )}
@@ -113,7 +112,7 @@ export default function ServicesSubNav() {
 
         <div>
           <Link
-            href="/admin/services/classes"
+            href="/admin/service-types/classes"
             className={cx(
               "flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm font-semibold transition-colors",
               onClasses
@@ -144,4 +143,3 @@ export default function ServicesSubNav() {
     </aside>
   );
 }
-

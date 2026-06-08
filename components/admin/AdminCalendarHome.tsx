@@ -5,7 +5,10 @@ import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import CreateAppointmentModal, {
   type CreateAppointmentInitialSchedule,
 } from "@/components/admin/CreateAppointmentModal";
+import CreateCustomerModal from "@/components/admin/CreateCustomerModal";
 import EditAppointmentModal, { type AdminEditableAppointment } from "@/components/admin/EditAppointmentModal";
+import EditTherapistClassModal from "@/components/admin/EditTherapistClassModal";
+import EditTherapistServiceModal from "@/components/admin/EditTherapistServiceModal";
 import {
   addDaysToYMD,
   formatDateInTimeZone,
@@ -156,6 +159,9 @@ export default function AdminCalendarHome({
   const datePickerRef = useRef<HTMLDivElement>(null);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
+  const [createServiceOpen, setCreateServiceOpen] = useState(false);
+  const [createClassOpen, setCreateClassOpen] = useState(false);
+  const [createCustomerOpen, setCreateCustomerOpen] = useState(false);
 
   const weekStartYmd = useMemo(() => startOfWeekMondayYMD(anchor, timeZone), [anchor, timeZone]);
   const weekEndYmd = useMemo(() => addDaysToYMD(weekStartYmd, 6), [weekStartYmd]);
@@ -309,7 +315,7 @@ export default function AdminCalendarHome({
   const gridColsClass = view === "day" ? "grid-cols-[80px_1fr]" : "grid-cols-[80px_repeat(7,1fr)]";
 
   return (
-    <main className="flex min-h-0 flex-1 overflow-hidden">
+    <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <CreateAppointmentModal
         open={createOpen}
         onClose={() => {
@@ -323,6 +329,46 @@ export default function AdminCalendarHome({
           setReloadKey((k) => k + 1);
         }}
       />
+      {createServiceOpen ? (
+        <EditTherapistServiceModal
+          service={null}
+          onClose={() => setCreateServiceOpen(false)}
+          onSaved={() => setCreateServiceOpen(false)}
+        />
+      ) : null}
+      {createClassOpen ? (
+        <EditTherapistClassModal
+          classItem={null}
+          onClose={() => setCreateClassOpen(false)}
+          onSaved={() => setCreateClassOpen(false)}
+        />
+      ) : null}
+      {createCustomerOpen ? (
+        <CreateCustomerModal
+          onClose={() => setCreateCustomerOpen(false)}
+          onCreate={async (draft) => {
+            setErrorMsg(null);
+            try {
+              const res = await fetch("/api/v1/admin/clients", {
+                method: "POST",
+                cache: "no-store",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  fullName: draft.fullName,
+                  email: draft.email || undefined,
+                  phone: draft.phone || undefined,
+                }),
+              });
+              const json = (await res.json()) as { status?: string; message?: string };
+              if (!res.ok || json?.status !== "success") {
+                throw new Error(json?.message || `Create failed (HTTP ${res.status})`);
+              }
+            } catch (e) {
+              setErrorMsg(e instanceof Error ? e.message : "Failed to create customer");
+            }
+          }}
+        />
+      ) : null}
       {editOpen && selected ? (
         <EditAppointmentModal
           appointment={selected}
@@ -362,8 +408,8 @@ export default function AdminCalendarHome({
         />
       ) : null}
 
-      <section className="flex h-full min-h-0 flex-1 flex-col bg-mgmt-surface-container-lowest">
-        <header className="sticky top-0 z-40 grid h-16 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b border-mgmt-outline-variant/10 bg-white/80 px-8 backdrop-blur-xl">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-mgmt-surface-container-lowest">
+        <header className="z-40 grid h-16 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b border-mgmt-outline-variant/10 bg-white/80 px-8 backdrop-blur-xl">
           <div aria-hidden />
 
           <div className="flex items-center gap-4">
@@ -500,28 +546,37 @@ export default function AdminCalendarHome({
                   <button
                     type="button"
                     role="menuitem"
-                    disabled
-                    className="flex w-full cursor-not-allowed items-center gap-3 px-4 py-2.5 text-left text-sm text-mgmt-on-surface-variant/60"
+                    onClick={() => {
+                      setActionsMenuOpen(false);
+                      setCreateServiceOpen(true);
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-mgmt-on-surface hover:bg-mgmt-surface-container-low"
                   >
-                    <MaterialSymbol name="medical_services" className="text-[18px]" />
+                    <MaterialSymbol name="medical_services" className="text-[18px] text-mgmt-on-surface-variant" />
                     Create service
                   </button>
                   <button
                     type="button"
                     role="menuitem"
-                    disabled
-                    className="flex w-full cursor-not-allowed items-center gap-3 px-4 py-2.5 text-left text-sm text-mgmt-on-surface-variant/60"
+                    onClick={() => {
+                      setActionsMenuOpen(false);
+                      setCreateCustomerOpen(true);
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-mgmt-on-surface hover:bg-mgmt-surface-container-low"
                   >
-                    <MaterialSymbol name="group_add" className="text-[18px]" />
+                    <MaterialSymbol name="group_add" className="text-[18px] text-mgmt-on-surface-variant" />
                     Add customer
                   </button>
                   <button
                     type="button"
                     role="menuitem"
-                    disabled
-                    className="flex w-full cursor-not-allowed items-center gap-3 px-4 py-2.5 text-left text-sm text-mgmt-on-surface-variant/60"
+                    onClick={() => {
+                      setActionsMenuOpen(false);
+                      setCreateClassOpen(true);
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-mgmt-on-surface hover:bg-mgmt-surface-container-low"
                   >
-                    <MaterialSymbol name="school" className="text-[18px]" />
+                    <MaterialSymbol name="school" className="text-[18px] text-mgmt-on-surface-variant" />
                     Create class
                   </button>
                 </div>
@@ -530,106 +585,113 @@ export default function AdminCalendarHome({
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-auto bg-mgmt-surface">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-mgmt-surface">
           {errorMsg ? (
-            <div className="border-b border-mgmt-outline-variant/10 bg-red-50 px-6 py-3 text-sm text-red-700">
+            <div className="shrink-0 border-b border-mgmt-outline-variant/10 bg-red-50 px-6 py-3 text-sm text-red-700">
               {errorMsg}
             </div>
           ) : null}
           {loading ? (
-            <div className="border-b border-mgmt-outline-variant/10 bg-white/60 px-6 py-3 text-sm text-mgmt-on-surface-variant">
+            <div className="shrink-0 border-b border-mgmt-outline-variant/10 bg-white/60 px-6 py-3 text-sm text-mgmt-on-surface-variant">
               Loading…
             </div>
           ) : null}
           {view === "month" ? (
-            <MonthGrid
-              anchor={anchor}
-              timeZone={timeZone}
-              todayYmd={todayYmd}
-              onSelectDay={(d) => {
-                setAnchor(d);
-                setView("day");
-              }}
-            />
+            <div className="min-h-0 flex-1 overflow-auto">
+              <MonthGrid
+                anchor={anchor}
+                timeZone={timeZone}
+                todayYmd={todayYmd}
+                onSelectDay={(d) => {
+                  setAnchor(d);
+                  setView("day");
+                }}
+              />
+            </div>
           ) : (
-            <div className={`grid min-h-full min-w-[800px] ${gridColsClass}`}>
-              <div className="sticky top-0 z-20 border-b border-mgmt-outline-variant/10 bg-mgmt-surface" />
-              {dayColumns.map((colDate) => {
-                const colYmd = {
-                  year: colDate.getFullYear(),
-                  month: colDate.getMonth() + 1,
-                  day: colDate.getDate(),
-                };
-                const isToday =
-                  colYmd.year === todayYmd.year &&
-                  colYmd.month === todayYmd.month &&
-                  colYmd.day === todayYmd.day;
-                const dow = formatDateInTimeZone(colDate, timeZone, { weekday: "short" });
-                const dom = colDate.getDate();
-                return (
-                  <div
-                    key={colDate.toISOString()}
-                    className="sticky top-0 z-20 border-b border-mgmt-outline-variant/10 bg-mgmt-surface py-4 text-center"
-                  >
-                    <span
-                      className={`block text-xs font-bold uppercase tracking-widest ${
-                        isToday ? "text-mgmt-primary" : "text-mgmt-on-surface-variant"
-                      }`}
-                    >
-                      {dow}
-                    </span>
-                    {isToday ? (
-                      <div className="mx-auto mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-mgmt-primary text-2xl font-bold text-mgmt-on-primary">
-                        {dom}
-                      </div>
-                    ) : (
-                      <span className="mt-1 block text-2xl font-bold text-mgmt-on-surface">{dom}</span>
-                    )}
-                  </div>
-                );
-              })}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="shrink-0 overflow-x-auto border-b border-mgmt-outline-variant/10 bg-mgmt-surface">
+                <div className={`grid min-w-[800px] ${gridColsClass}`}>
+                  <div className="bg-mgmt-surface" />
+                  {dayColumns.map((colDate) => {
+                  const colYmd = {
+                    year: colDate.getFullYear(),
+                    month: colDate.getMonth() + 1,
+                    day: colDate.getDate(),
+                  };
+                  const isToday =
+                    colYmd.year === todayYmd.year &&
+                    colYmd.month === todayYmd.month &&
+                    colYmd.day === todayYmd.day;
+                  const dow = formatDateInTimeZone(colDate, timeZone, { weekday: "short" });
+                  const dom = colDate.getDate();
+                  return (
+                    <div key={colDate.toISOString()} className="bg-mgmt-surface py-4 text-center">
+                      <span
+                        className={`block text-xs font-bold uppercase tracking-widest ${
+                          isToday ? "text-mgmt-primary" : "text-mgmt-on-surface-variant"
+                        }`}
+                      >
+                        {dow}
+                      </span>
+                      {isToday ? (
+                        <div className="mx-auto mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-mgmt-primary text-2xl font-bold text-mgmt-on-primary">
+                          {dom}
+                        </div>
+                      ) : (
+                        <span className="mt-1 block text-2xl font-bold text-mgmt-on-surface">{dom}</span>
+                      )}
+                    </div>
+                  );
+                  })}
+                </div>
+              </div>
 
-              {TIME_LABELS.map((timeLabel, hour) => (
-                <TimeRow
-                  key={timeLabel}
-                  timeLabel={timeLabel}
-                  hour={hour}
-                  timeZone={timeZone}
-                  dayColumns={dayColumns}
-                  events={events}
-                  onEmptySlot={(colDate) => {
-                    setCreateInitialSchedule(slotToInitialSchedule(colDate, hour));
-                    setCreateOpen(true);
-                  }}
-                  onSelectEvent={(ev) => {
-                    const dateLine = formatDateInTimeZone(ev.startUtc, timeZone, {
-                      day: "2-digit",
-                      month: "short",
-                    }).toUpperCase();
-                    const dow = formatDateInTimeZone(ev.startUtc, timeZone, {
-                      weekday: "short",
-                    }).toUpperCase();
-                    const timeRange = `${formatTimeInTimeZone(ev.startUtc, timeZone)} – ${formatTimeInTimeZone(ev.endUtc, timeZone)}`;
+              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+                <div className={`grid min-w-[800px] ${gridColsClass}`}>
+                  {TIME_LABELS.map((timeLabel, hour) => (
+                    <TimeRow
+                      key={timeLabel}
+                      timeLabel={timeLabel}
+                      hour={hour}
+                      timeZone={timeZone}
+                      dayColumns={dayColumns}
+                      events={events}
+                      onEmptySlot={(colDate) => {
+                        setCreateInitialSchedule(slotToInitialSchedule(colDate, hour));
+                        setCreateOpen(true);
+                      }}
+                      onSelectEvent={(ev) => {
+                        const dateLine = formatDateInTimeZone(ev.startUtc, timeZone, {
+                          day: "2-digit",
+                          month: "short",
+                        }).toUpperCase();
+                        const dow = formatDateInTimeZone(ev.startUtc, timeZone, {
+                          weekday: "short",
+                        }).toUpperCase();
+                        const timeRange = `${formatTimeInTimeZone(ev.startUtc, timeZone)} – ${formatTimeInTimeZone(ev.endUtc, timeZone)}`;
 
-                    setSelected({
-                      dayId: zonedLocalYmdTimeToUtc(weekStartYmd, "12:00", timeZone).toISOString(),
-                      sessionId: ev.id,
-                      dateLine: `${dateLine}, ${dow}`,
-                      timeRange,
-                      title: ev.title,
-                      providerName: ev.subtitle,
-                      notes: "",
-                      videoLink: "",
-                      proofUrl: ev.proofUrl,
-                      approvalStatus: ev.approvalStatus ?? "pending",
-                      appointmentStatus: ev.appointmentStatus,
-                      startAt: ev.startUtc.toISOString(),
-                      endAt: ev.endUtc.toISOString(),
-                    });
-                    setEditOpen(true);
-                  }}
-                />
-              ))}
+                        setSelected({
+                          dayId: zonedLocalYmdTimeToUtc(weekStartYmd, "12:00", timeZone).toISOString(),
+                          sessionId: ev.id,
+                          dateLine: `${dateLine}, ${dow}`,
+                          timeRange,
+                          title: ev.title,
+                          providerName: ev.subtitle,
+                          notes: "",
+                          videoLink: "",
+                          proofUrl: ev.proofUrl,
+                          approvalStatus: ev.approvalStatus ?? "pending",
+                          appointmentStatus: ev.appointmentStatus,
+                          startAt: ev.startUtc.toISOString(),
+                          endAt: ev.endUtc.toISOString(),
+                        });
+                        setEditOpen(true);
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </div>
