@@ -30,6 +30,7 @@ export function useAdminTherapists() {
   const [items, setItems] = useState<TherapistsApiItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -60,7 +61,7 @@ export function useAdminTherapists() {
     })();
 
     return () => ac.abort();
-  }, []);
+  }, [reloadKey]);
 
   const therapists = useMemo<AdminTherapistListItem[]>(() => {
     return items.map((t) => {
@@ -78,6 +79,6 @@ export function useAdminTherapists() {
     });
   }, [items]);
 
-  return { therapists, loading, error };
+  return { therapists, loading, error, refetch: () => setReloadKey((k) => k + 1) };
 }
 

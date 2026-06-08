@@ -48,16 +48,16 @@ export default function TherapistsDirectoryColumn({
       <div className="sticky top-0 z-40 shrink-0 border-b border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-            Therapists
+            Team
           </h2>
-          <button
+          {/* <button
             type="button"
             className="flex items-center gap-2 rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-xs font-semibold text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container"
             onClick={onAdd}
           >
             <MaterialSymbol name="person_add" className="text-[18px]" />
             Add
-          </button>
+          </button> */}
         </div>
 
         <div className="mt-3 flex items-center gap-2 rounded-xl bg-mgmt-surface-container-low px-3 py-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import CreateAppointmentModal, {
   type CreateAppointmentInitialSchedule,
@@ -132,9 +132,11 @@ function slotToInitialSchedule(colDate: Date, hour: number): CreateAppointmentIn
 export default function AdminCalendarHome({
   therapistId,
   therapistTimezone,
+  onAddTherapist,
 }: {
   therapistId?: string;
   therapistTimezone?: string;
+  onAddTherapist?: () => void;
 }) {
   const [timeZone, setTimeZone] = useState(() => normalizeTimeZone(therapistTimezone));
   const [view, setView] = useState<CalendarView>("week");
@@ -150,6 +152,10 @@ export default function AdminCalendarHome({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const datePickerRef = useRef<HTMLDivElement>(null);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
 
   const weekStartYmd = useMemo(() => startOfWeekMondayYMD(anchor, timeZone), [anchor, timeZone]);
   const weekEndYmd = useMemo(() => addDaysToYMD(weekStartYmd, 6), [weekStartYmd]);
@@ -278,6 +284,28 @@ export default function AdminCalendarHome({
     else setAnchor(shiftAnchorMonthsInTimeZone(anchor, 1, timeZone));
   }
 
+  useEffect(() => {
+    if (!datePickerOpen) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) {
+        setDatePickerOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [datePickerOpen]);
+
+  useEffect(() => {
+    if (!actionsMenuOpen) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target as Node)) {
+        setActionsMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [actionsMenuOpen]);
+
   const gridColsClass = view === "day" ? "grid-cols-[80px_1fr]" : "grid-cols-[80px_repeat(7,1fr)]";
 
   return (
@@ -335,21 +363,45 @@ export default function AdminCalendarHome({
       ) : null}
 
       <section className="flex h-full min-h-0 flex-1 flex-col bg-mgmt-surface-container-lowest">
-        <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between border-b border-mgmt-outline-variant/10 bg-white/80 px-8 backdrop-blur-xl">
-          <div className="flex items-center gap-6">
-            <h2 className="text-xl font-bold text-mgmt-on-surface">{headerTitle}</h2>
-            <div className="flex items-center rounded-lg bg-mgmt-surface-container-low p-1">
+        <header className="sticky top-0 z-40 grid h-16 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b border-mgmt-outline-variant/10 bg-white/80 px-8 backdrop-blur-xl">
+          <div aria-hidden />
+
+          <div className="flex items-center gap-4">
+            <div className="relative" ref={datePickerRef}>
               <button
                 type="button"
-                onClick={onToday}
-                className="rounded bg-white px-4 py-1.5 text-sm font-semibold text-mgmt-primary shadow-sm"
+                onClick={() => setDatePickerOpen((open) => !open)}
+                className="inline-flex items-center gap-1 rounded-lg px-1 py-1 text-xl font-bold text-mgmt-on-surface hover:bg-mgmt-surface-container-low"
+                aria-expanded={datePickerOpen}
+                aria-haspopup="dialog"
+                aria-label="Choose date"
               >
-                Today
+                {headerTitle}
+                <MaterialSymbol
+                  name="expand_more"
+                  className={`text-[22px] text-mgmt-on-surface-variant transition-transform ${
+                    datePickerOpen ? "rotate-180" : ""
+                  }`}
+                />
               </button>
+              {datePickerOpen ? (
+                <CalendarDatePickerPopover
+                  anchor={anchor}
+                  timeZone={timeZone}
+                  todayYmd={todayYmd}
+                  onSelectDay={(d) => {
+                    setAnchor(d);
+                    setDatePickerOpen(false);
+                  }}
+                />
+              ) : null}
+            </div>
+
+            <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={onPrev}
-                className="p-1.5 text-mgmt-on-surface-variant hover:text-mgmt-on-surface"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-mgmt-on-surface-variant hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface"
                 aria-label="Previous"
               >
                 <MaterialSymbol name="chevron_left" />
@@ -357,16 +409,23 @@ export default function AdminCalendarHome({
               <button
                 type="button"
                 onClick={onNext}
-                className="p-1.5 text-mgmt-on-surface-variant hover:text-mgmt-on-surface"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-mgmt-on-surface-variant hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface"
                 aria-label="Next"
               >
                 <MaterialSymbol name="chevron_right" />
               </button>
+              <button
+                type="button"
+                onClick={onToday}
+                className="inline-flex h-9 items-center rounded-lg bg-white px-4 text-sm font-semibold text-mgmt-primary shadow-sm"
+              >
+                Today
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center rounded-lg bg-mgmt-surface-container-low p-1">
+          <div className="flex items-center justify-end gap-4">
+            {/* <div className="flex items-center rounded-lg bg-mgmt-surface-container-low p-1">
               <button
                 type="button"
                 onClick={() => setView("day")}
@@ -394,21 +453,80 @@ export default function AdminCalendarHome({
               >
                 Month
               </button>
+            </div> */}
+
+            <div className="relative" ref={actionsMenuRef}>
+              <button
+                type="button"
+                onClick={() => setActionsMenuOpen((open) => !open)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-mgmt-on-surface-variant transition-colors hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface"
+                aria-label="Create"
+                aria-haspopup="menu"
+                aria-expanded={actionsMenuOpen}
+              >
+                <MaterialSymbol name="add" className="text-[22px]" />
+              </button>
+
+              {actionsMenuOpen ? (
+                <div
+                  className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-mgmt-outline-variant/20 bg-white py-1 shadow-lg"
+                  role="menu"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setActionsMenuOpen(false);
+                      setCreateInitialSchedule(null);
+                      setCreateOpen(true);
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-mgmt-on-surface hover:bg-mgmt-surface-container-low"
+                  >
+                    <MaterialSymbol name="event" className="text-[18px] text-mgmt-on-surface-variant" />
+                    New booking
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setActionsMenuOpen(false);
+                      onAddTherapist?.();
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-mgmt-on-surface hover:bg-mgmt-surface-container-low"
+                  >
+                    <MaterialSymbol name="person_add" className="text-[18px] text-mgmt-on-surface-variant" />
+                    Add therapist
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled
+                    className="flex w-full cursor-not-allowed items-center gap-3 px-4 py-2.5 text-left text-sm text-mgmt-on-surface-variant/60"
+                  >
+                    <MaterialSymbol name="medical_services" className="text-[18px]" />
+                    Create service
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled
+                    className="flex w-full cursor-not-allowed items-center gap-3 px-4 py-2.5 text-left text-sm text-mgmt-on-surface-variant/60"
+                  >
+                    <MaterialSymbol name="group_add" className="text-[18px]" />
+                    Add customer
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled
+                    className="flex w-full cursor-not-allowed items-center gap-3 px-4 py-2.5 text-left text-sm text-mgmt-on-surface-variant/60"
+                  >
+                    <MaterialSymbol name="school" className="text-[18px]" />
+                    Create class
+                  </button>
+                </div>
+              ) : null}
             </div>
-
-            <div className="mx-2 h-6 w-px bg-mgmt-outline-variant/20" />
-
-            <button
-              type="button"
-              onClick={() => {
-                setCreateInitialSchedule(null);
-                setCreateOpen(true);
-              }}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-br from-mgmt-primary to-mgmt-primary-dim px-5 py-2.5 text-sm font-semibold text-mgmt-on-primary shadow-md transition-all active:scale-95"
-            >
-              <MaterialSymbol name="add" className="text-lg" />
-              Create Appointment
-            </button>
           </div>
         </header>
 
@@ -605,6 +723,121 @@ function EventBlock({ ev, onClick }: { ev: CalEvent; onClick: () => void }) {
       <p className="text-[0.65rem] font-bold leading-tight text-slate-700">{ev.title}</p>
       <p className="text-[0.6rem] text-slate-500">{ev.subtitle}</p>
     </button>
+  );
+}
+
+function CalendarDatePickerPopover({
+  anchor,
+  timeZone,
+  todayYmd,
+  onSelectDay,
+}: {
+  anchor: Date;
+  timeZone: string;
+  todayYmd: YMD;
+  onSelectDay: (d: Date) => void;
+}) {
+  const anchorYmd = getYMDInTimeZone(anchor, timeZone);
+  const [pickerYmd, setPickerYmd] = useState(() => ({
+    year: anchorYmd.year,
+    month: anchorYmd.month,
+  }));
+
+  useEffect(() => {
+    const ymd = getYMDInTimeZone(anchor, timeZone);
+    setPickerYmd({ year: ymd.year, month: ymd.month });
+  }, [anchor, timeZone]);
+
+  const { year, month } = pickerYmd;
+  const monthLabel = formatDateInTimeZone(
+    ymdToWallClockDate({ year, month, day: 1 }),
+    timeZone,
+    { month: "long", year: "numeric" },
+  );
+
+  const first = ymdToWallClockDate({ year, month, day: 1 });
+  const startPad = first.getDay() === 0 ? 6 : first.getDay() - 1;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < startPad; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const weekdayHeaders = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  function onPrevMonth() {
+    setPickerYmd((prev) => {
+      if (prev.month === 1) return { year: prev.year - 1, month: 12 };
+      return { year: prev.year, month: prev.month - 1 };
+    });
+  }
+
+  function onNextMonth() {
+    setPickerYmd((prev) => {
+      if (prev.month === 12) return { year: prev.year + 1, month: 1 };
+      return { year: prev.year, month: prev.month + 1 };
+    });
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-label="Choose date"
+      className="absolute left-1/2 top-full z-50 mt-2 w-72 -translate-x-1/2 rounded-xl border border-mgmt-outline-variant/20 bg-white p-4 shadow-lg"
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={onPrevMonth}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-mgmt-on-surface-variant hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface"
+          aria-label="Previous month"
+        >
+          <MaterialSymbol name="chevron_left" />
+        </button>
+        <span className="text-sm font-bold text-mgmt-on-surface">{monthLabel}</span>
+        <button
+          type="button"
+          onClick={onNextMonth}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-mgmt-on-surface-variant hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface"
+          aria-label="Next month"
+        >
+          <MaterialSymbol name="chevron_right" />
+        </button>
+      </div>
+
+      <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[0.65rem] font-bold uppercase tracking-wider text-mgmt-on-surface-variant">
+        {weekdayHeaders.map((h) => (
+          <div key={h} className="py-1">
+            {h}
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((day, idx) => {
+          if (day === null) return <div key={`empty-${idx}`} className="h-8" />;
+          const isToday =
+            year === todayYmd.year && month === todayYmd.month && day === todayYmd.day;
+          const isSelected =
+            year === anchorYmd.year && month === anchorYmd.month && day === anchorYmd.day;
+          return (
+            <button
+              key={day}
+              type="button"
+              onClick={() => onSelectDay(zonedLocalYmdTimeToUtc({ year, month, day }, "12:00", timeZone))}
+              className={`inline-flex h-8 w-full items-center justify-center rounded-lg text-sm font-semibold transition-colors ${
+                isSelected
+                  ? "bg-mgmt-primary text-mgmt-on-primary"
+                  : isToday
+                    ? "bg-mgmt-primary/15 text-mgmt-primary"
+                    : "text-mgmt-on-surface hover:bg-mgmt-surface-container-low"
+              }`}
+            >
+              {day}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
