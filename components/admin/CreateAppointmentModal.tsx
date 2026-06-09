@@ -1109,7 +1109,7 @@ export default function CreateAppointmentModal({
             <button
               type="button"
               disabled={submitting || loadingData || !canCreate}
-              className="rounded-xl bg-black px-8 py-2.5 text-sm font-bold text-white transition-transform active:scale-95 disabled:opacity-40"
+              className="rounded-xl bg-mgmt-primary px-4 py-2 text-sm font-semibold text-mgmt-on-primary transition-opacity hover:opacity-90 disabled:opacity-40"
               onClick={async () => {
                 if (tab === "class") {
                   if (!canCreateClass) return;

@@ -149,8 +149,8 @@ export default function AdminCustomerDetail({
   }, [customer.cityStateLine, customer.country]);
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <div className="mb-8 rounded-xl bg-mgmt-surface-container-lowest p-8">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto bg-mgmt-surface-container-lowest">
+      <div className="flex min-h-0 flex-1 flex-col px-6 py-6 sm:px-8 sm:py-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="flex min-w-0 flex-1 items-start gap-4 sm:gap-6">
             {customer.avatarUrl ? (
@@ -184,10 +184,12 @@ export default function AdminCustomerDetail({
           <div className="flex shrink-0 items-center gap-2 md:self-start">
             <button
               type="button"
-              className="whitespace-nowrap rounded-lg bg-mgmt-primary px-4 py-2 text-sm font-semibold text-mgmt-on-primary transition-opacity hover:opacity-90"
+              className="flex items-center gap-2 whitespace-nowrap rounded-xl bg-mgmt-primary px-4 py-2 text-sm font-semibold text-mgmt-on-primary transition-opacity hover:opacity-90"
               onClick={() => setEditOpen(true)}
+              aria-label="Edit profile"
             >
-              Edit Profile
+              <MaterialSymbol name="edit" className="text-[18px]" />
+              Edit profile
             </button>
             <span
               className="shrink-0 rounded-lg bg-mgmt-surface-container-low p-2.5 text-mgmt-on-surface-variant"
@@ -387,7 +389,7 @@ export default function AdminCustomerDetail({
                   </button>
                   <button
                     type="button"
-                    className="rounded-lg bg-mgmt-primary px-5 py-2 text-sm font-semibold text-mgmt-on-primary transition-opacity hover:opacity-90 disabled:opacity-40"
+                    className="rounded-xl bg-mgmt-primary px-4 py-2 text-sm font-semibold text-mgmt-on-primary transition-opacity hover:opacity-90 disabled:opacity-40"
                     disabled={!noteDraft.trim()}
                     onClick={() => {
                       const text = noteDraft.trim();

@@ -88,9 +88,9 @@ export default function AdminSidebar({
 
       <div className="mt-4 shrink-0  border-slate-200 px-2 pt-4">
         <div className="flex items-center gap-3 rounded-lg px-2 py-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-mgmt-primary-container text-sm font-bold text-mgmt-on-primary-container">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7E7E7] text-sm font-bold text-[#5F5F5F]">
             {profileLoading ? (
-              <MaterialSymbol name="account_circle" className="text-[22px]" />
+              <MaterialSymbol name="account_circle" className="text-[22px] text-[#5F5F5F]" />
             ) : (
               initials
             )}

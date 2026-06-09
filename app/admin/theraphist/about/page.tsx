@@ -167,9 +167,7 @@ export default function TheraphistSettingsAboutPage() {
           <label className="block text-xs font-semibold tracking-widest text-mgmt-on-surface-variant">
             ABOUT
           </label>
-          <p className="mt-3 text-xs font-semibold tracking-widest text-mgmt-on-surface-variant">
-            ABOUT YOU
-          </p>
+
           <textarea
             className="mt-2 min-h-28 w-full resize-none rounded-xl border-none bg-mgmt-surface-container-low px-4 py-4 text-sm text-mgmt-on-surface outline-none placeholder:text-mgmt-on-surface-variant focus:ring-1 focus:ring-mgmt-primary/30"
             placeholder="Briefly describe your professional experience..."

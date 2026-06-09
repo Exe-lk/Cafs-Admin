@@ -257,7 +257,7 @@ export default function EditAppointmentModal({
                         appointmentStatus: "confirmed",
                       }));
                     }}
-                    className="rounded-xl bg-black px-4 py-2 text-xs font-bold uppercase tracking-wider text-white transition-transform active:scale-95"
+                    className="rounded-xl bg-mgmt-primary px-4 py-2 text-xs font-bold uppercase tracking-wider text-mgmt-on-primary transition-opacity hover:opacity-90"
                   >
                     Approve
                   </button>
@@ -357,7 +357,7 @@ export default function EditAppointmentModal({
                     className={cx(
                       "shrink-0 rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wider transition-colors",
                       draft.proofUrl
-                        ? "bg-mgmt-primary text-mgmt-on-primary hover:brightness-[0.98]"
+                        ? "bg-mgmt-primary text-mgmt-on-primary transition-opacity hover:opacity-90"
                         : "cursor-not-allowed bg-mgmt-outline-variant/10 text-mgmt-on-surface-variant/60",
                     )}
                     onClick={(e) => {
@@ -431,7 +431,7 @@ export default function EditAppointmentModal({
                     </div>
                     <button
                       type="button"
-                      className="sm:col-span-2 rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white transition-transform active:scale-95 disabled:opacity-40"
+                      className="sm:col-span-2 rounded-xl bg-mgmt-primary px-4 py-2 text-sm font-semibold text-mgmt-on-primary transition-opacity hover:opacity-90 disabled:opacity-40"
                       disabled={!rescheduleDate || !rescheduleTime || busy}
                       onClick={() => {
                         if (!rescheduleDate || !rescheduleTime) return;
@@ -496,7 +496,7 @@ export default function EditAppointmentModal({
               </button>
               <button
                 type="button"
-                className="rounded-xl bg-black px-7 py-2.5 text-sm font-bold text-white transition-transform active:scale-95 disabled:opacity-40"
+                className="rounded-xl bg-mgmt-primary px-4 py-2 text-sm font-semibold text-mgmt-on-primary transition-opacity hover:opacity-90 disabled:opacity-40"
                 disabled={!canSave || busy}
                 onClick={() => {
                   if (!canSave) return;

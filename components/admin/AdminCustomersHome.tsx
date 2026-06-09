@@ -97,22 +97,23 @@ export default function AdminCustomersHome() {
   }, [filtered, selectedId]);
 
   return (
-    <div className="flex h-full min-h-0 bg-mgmt-surface">
-      {/* Desktop: fixed full-height white column */}
+    <div className="flex h-full min-h-0 w-full overflow-hidden bg-mgmt-surface-container-lowest">
+      {/* Desktop: fixed full-height customer list column */}
       <div
-        className="hidden overflow-hidden border-r border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest md:fixed md:left-64 md:top-0 md:z-40 md:flex md:h-dvh md:w-72 md:flex-col"
+        className="hidden overflow-hidden border-r border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest lg:fixed lg:left-64 lg:top-0 lg:z-40 lg:flex lg:h-full lg:w-80 lg:flex-col"
         data-purpose="customers-list-fixed"
       >
       <section className="flex min-h-0 flex-1 flex-col bg-mgmt-surface-container-lowest">
-        <header className="p-6">
+        <header className="shrink-0 px-6 pb-4 pt-6">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-[1.5rem] font-semibold text-mgmt-on-background">Customers</h2>
+            <h2 className="text-2xl font-semibold text-mgmt-on-surface">Customers</h2>
             <button
               type="button"
-              className="shrink-0 rounded-lg bg-mgmt-primary px-3 py-1.5 text-xs font-bold text-mgmt-on-primary transition-opacity hover:opacity-90"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-mgmt-on-surface text-mgmt-surface-container-lowest shadow-md transition-transform hover:bg-mgmt-on-background active:scale-95"
               onClick={() => setCreateOpen(true)}
+              aria-label="Add customer"
             >
-              + Add
+              <MaterialSymbol name="add" className="text-[22px]" />
             </button>
           </div>
           <div className="relative">
@@ -121,8 +122,8 @@ export default function AdminCustomersHome() {
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-lg text-mgmt-on-surface-variant"
             />
             <input
-              className="w-full rounded-lg border-none bg-mgmt-surface-container-low py-2 pr-4 pl-10 text-sm text-mgmt-on-surface transition-all placeholder:text-mgmt-on-surface-variant focus:bg-mgmt-surface-container-lowest focus:ring-1 focus:ring-mgmt-primary focus:outline-none"
-              placeholder="Search customers..."
+              className="h-10 w-full rounded-lg border border-mgmt-outline-variant/30 bg-mgmt-surface-container-lowest py-2 pr-4 pl-10 text-sm text-mgmt-on-surface transition-all placeholder:text-mgmt-on-surface-variant focus:border-mgmt-primary/40 focus:ring-2 focus:ring-mgmt-primary/15 focus:outline-none"
+              placeholder="Search"
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -151,16 +152,16 @@ export default function AdminCustomersHome() {
                   className={cx(
                     "flex w-full cursor-pointer items-center gap-3 px-6 py-4 text-left transition-colors",
                     isActive
-                      ? "border-l-4 border-mgmt-primary bg-mgmt-tertiary-container"
-                      : "border-l-4 border-transparent hover:bg-mgmt-surface",
+                      ? "bg-mgmt-surface-container-low"
+                      : "hover:bg-mgmt-surface-container-low/60",
                   )}
                 >
                   <div
                     className={cx(
-                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-bold",
+                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold",
                       isActive
-                        ? "bg-mgmt-primary text-mgmt-on-primary"
-                        : "bg-mgmt-surface-container-high text-mgmt-on-surface-variant",
+                        ? "bg-[#E7E7E7] text-[#5F5F5F]"
+                        : "bg-[#E7E7E7] text-[#5F5F5F]",
                     )}
                   >
                     {listInitial(c.fullName)}
@@ -176,9 +177,9 @@ export default function AdminCustomersHome() {
         </div>
       </section>
       </div>
-      <div className="hidden w-72 shrink-0 md:block" aria-hidden />
+      <div className="hidden w-80 shrink-0 lg:block" aria-hidden />
 
-      <section className="min-w-0 flex-1 overflow-y-auto bg-mgmt-surface p-4 sm:p-6 md:p-8">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-mgmt-surface-container-lowest">
         {/* Mobile: customer selector + search */}
         <div className="mb-4 md:hidden">
           <div className="flex items-center justify-between gap-3">
@@ -270,10 +271,11 @@ export default function AdminCustomersHome() {
 
             <button
               type="button"
-              className="shrink-0 rounded-xl bg-mgmt-primary px-4 py-3 text-xs font-bold text-mgmt-on-primary transition-opacity hover:opacity-90"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-mgmt-on-surface text-mgmt-surface-container-lowest shadow-md transition-transform hover:bg-mgmt-on-background active:scale-95"
               onClick={() => setCreateOpen(true)}
+              aria-label="Add customer"
             >
-              + Add
+              <MaterialSymbol name="add" className="text-[22px]" />
             </button>
           </div>
           <p className="mt-2 text-xs text-mgmt-on-surface-variant">
@@ -281,6 +283,7 @@ export default function AdminCustomersHome() {
           </p>
         </div>
 
+        <div className="min-h-0 flex-1 overflow-hidden">
         {selected ? (
           <AdminCustomerDetail
             key={selected.id}
@@ -306,8 +309,9 @@ export default function AdminCustomersHome() {
             }}
           />
         ) : (
-          <p className="text-sm text-mgmt-on-surface-variant">Select a customer.</p>
+          <p className="px-6 py-8 text-sm text-mgmt-on-surface-variant">Select a customer.</p>
         )}
+        </div>
       </section>
 
       {createOpen ? (

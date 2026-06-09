@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import EditTherapistServiceModal, {
   type EditTherapistServiceModalItem,
 } from "@/components/admin/EditTherapistServiceModal";
@@ -59,6 +60,32 @@ function serviceDisplayTitle(service: ServiceItem) {
   return `${service.title} by ${service.therapistName}`;
 }
 
+function therapistInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "T";
+  if (parts.length === 1) return parts[0]!.slice(0, 1).toUpperCase();
+  return `${parts[0]!.slice(0, 1)}${parts[parts.length - 1]!.slice(0, 1)}`.toUpperCase();
+}
+
+function therapistBookingSlug(name: string) {
+  const cleaned = name.replace(/^(dr\.|ms\.|mr\.)\s*/i, "").trim();
+  const first = cleaned.split(/\s+/).filter(Boolean)[0] ?? "therapist";
+  return first.toLowerCase();
+}
+
+function LinkIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M13.828 10.172a4 4 0 0 0-5.656 0l-4 4a4 4 0 1 0 5.656 5.656l1.102-1.101m-.758-4.899a4 4 0 0 0 5.656 0l4-4a4 4 0 0 0-5.656-5.656l-1.1 1.1"
+      />
+    </svg>
+  );
+}
+
 function ClockIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -93,13 +120,14 @@ function MoreIcon({ className }: { className?: string }) {
   );
 }
 
-const filterSelectClass =
-  "block w-full rounded-lg border border-mgmt-outline-variant bg-mgmt-surface-container-low py-2 px-3 text-sm text-mgmt-on-surface focus:border-mgmt-primary focus:ring-2 focus:ring-mgmt-primary-container focus:outline-none sm:min-w-[200px] sm:w-auto";
+const therapistFilterClass =
+  "h-full min-w-0 flex-1 appearance-none border-none bg-transparent py-2 pl-2 pr-8 text-sm text-mgmt-on-surface outline-none";
 
 export default function AdminServicesHome() {
   const [therapistFilter, setTherapistFilter] = useState("");
   const [search, setSearch] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [pageLinkCopied, setPageLinkCopied] = useState(false);
   const [serviceModal, setServiceModal] = useState<ServiceModalState>("closed");
   const services = PLACEHOLDER_SERVICES;
 
@@ -110,6 +138,31 @@ export default function AdminServicesHome() {
     }
     return Array.from(map, ([id, name]) => ({ id, name }));
   }, [services]);
+
+  const activeTherapist = useMemo(() => {
+    if (therapistFilter) {
+      return therapistOptions.find((t) => t.id === therapistFilter) ?? therapistOptions[0];
+    }
+    return therapistOptions[0];
+  }, [therapistFilter, therapistOptions]);
+
+  const bookingPagePath = useMemo(() => {
+    const slug = activeTherapist ? therapistBookingSlug(activeTherapist.name) : "book";
+    if (typeof window === "undefined") return `book/${slug}`;
+    return `${window.location.host}/book/${slug}`;
+  }, [activeTherapist]);
+
+  const copyPageLink = useCallback(async () => {
+    const slug = activeTherapist ? therapistBookingSlug(activeTherapist.name) : "book";
+    const url = `${window.location.origin}/book/${slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setPageLinkCopied(true);
+      window.setTimeout(() => setPageLinkCopied(false), 2000);
+    } catch {
+      setPageLinkCopied(false);
+    }
+  }, [activeTherapist]);
 
   const copyLink = useCallback(async (id: string, slug: string) => {
     const url = `${typeof window !== "undefined" ? window.location.origin : ""}/book/${slug}`;
@@ -174,20 +227,35 @@ export default function AdminServicesHome() {
       </header>
 
       <div className="mx-auto mt-12 w-full max-w-6xl p-4 sm:p-6 lg:p-8">
-        <div className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4" data-purpose="filters">
-          <select
-            value={therapistFilter}
-            onChange={(e) => setTherapistFilter(e.target.value)}
-            className={filterSelectClass}
-            aria-label="Filter by therapist"
-          >
-            <option value="">All therapists</option>
-            {therapistOptions.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
+        <div
+          className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-center sm:gap-4"
+          data-purpose="filters"
+        >
+          <div className="relative flex h-10 min-w-0 items-center rounded-lg border border-mgmt-outline-variant bg-mgmt-surface-container-low sm:min-w-[220px] sm:max-w-[260px]">
+            <span className="pointer-events-none flex shrink-0 items-center pl-3">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#E7E7E7] text-xs font-bold text-[#5F5F5F]">
+                {therapistInitials(activeTherapist?.name ?? "Therapist")}
+              </span>
+            </span>
+            <select
+              value={therapistFilter}
+              onChange={(e) => setTherapistFilter(e.target.value)}
+              className={therapistFilterClass}
+              aria-label="Filter by therapist"
+            >
+              <option value="">All therapists</option>
+              {therapistOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            <MaterialSymbol
+              name="expand_more"
+              className="pointer-events-none absolute right-2 text-[20px] text-mgmt-on-surface-variant"
+            />
+          </div>
+
           <div className="relative min-w-0 flex-1 sm:min-w-[220px]">
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
               <svg className="h-4 w-4 text-mgmt-on-surface-variant" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -202,11 +270,26 @@ export default function AdminServicesHome() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="block w-full rounded-lg border border-mgmt-outline-variant bg-mgmt-surface-container-low py-2 pl-10 pr-3 text-sm text-mgmt-on-surface placeholder:text-mgmt-on-surface-variant focus:border-mgmt-primary focus:ring-2 focus:ring-mgmt-primary-container focus:outline-none"
+              className="block h-10 w-full rounded-lg border border-mgmt-outline-variant bg-mgmt-surface-container-low py-2 pl-10 pr-3 text-sm text-mgmt-on-surface placeholder:text-mgmt-on-surface-variant focus:border-mgmt-primary focus:ring-2 focus:ring-mgmt-primary-container focus:outline-none"
               placeholder="Services"
               type="search"
             />
           </div>
+
+          <button
+            type="button"
+            onClick={() => void copyPageLink()}
+            className="inline-flex h-10 min-w-0 items-center gap-2 rounded-full bg-mgmt-surface-container-low px-3 text-sm text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container sm:ml-auto"
+            aria-label="Copy booking page link"
+          >
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E7E7E7] text-xs font-bold text-[#5F5F5F]">
+              {therapistInitials(activeTherapist?.name ?? "Therapist")}
+            </span>
+            <span className="min-w-0 truncate underline decoration-mgmt-outline-variant underline-offset-2">
+              {pageLinkCopied ? "Copied" : bookingPagePath}
+            </span>
+            <LinkIcon className="h-4 w-4 shrink-0 text-mgmt-on-surface-variant" />
+          </button>
         </div>
 
         <div className="space-y-3" data-purpose="services-list">

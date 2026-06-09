@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import CalendarPreferencesDrawer from "@/components/admin/CalendarPreferencesDrawer";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import CreateAppointmentModal, {
   type CreateAppointmentInitialSchedule,
@@ -35,6 +36,55 @@ const TIME_LABELS = Array.from({ length: 24 }, (_, i) => {
 });
 
 type CalendarView = "day" | "week" | "month";
+
+const CALENDAR_VIEW_OPTIONS: Array<{
+  value: CalendarView;
+  label: string;
+  shortcut: string;
+}> = [
+  { value: "day", label: "Day", shortcut: "D" },
+  { value: "week", label: "Week", shortcut: "W" },
+  { value: "month", label: "Month", shortcut: "M" },
+];
+
+function CalendarViewGlyph({ view, className }: { view: CalendarView; className?: string }) {
+  if (view === "day") {
+    return (
+      <svg className={className} viewBox="0 0 20 20" fill="none" aria-hidden>
+        <rect x="2.5" y="3.5" width="15" height="13" rx="2" stroke="currentColor" strokeWidth="1.5" />
+        <rect x="5" y="8.5" width="10" height="2.5" rx="0.5" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (view === "week") {
+    return (
+      <svg className={className} viewBox="0 0 20 20" fill="none" aria-hidden>
+        <rect x="2.5" y="3.5" width="15" height="13" rx="2" stroke="currentColor" strokeWidth="1.5" />
+        <rect x="5.5" y="6.5" width="2" height="7" rx="0.5" fill="currentColor" />
+        <rect x="9" y="6.5" width="2" height="7" rx="0.5" fill="currentColor" />
+        <rect x="12.5" y="6.5" width="2" height="7" rx="0.5" fill="currentColor" />
+      </svg>
+    );
+  }
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" aria-hidden>
+      <rect x="2.5" y="3.5" width="15" height="13" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      {[
+        [5.5, 6.5],
+        [8.25, 6.5],
+        [11, 6.5],
+        [5.5, 9.25],
+        [8.25, 9.25],
+        [11, 9.25],
+        [5.5, 12],
+        [8.25, 12],
+        [11, 12],
+      ].map(([x, y]) => (
+        <rect key={`${x}-${y}`} x={x} y={y} width="2" height="2" rx="0.35" fill="currentColor" />
+      ))}
+    </svg>
+  );
+}
 
 type CalEvent = {
   id: string;
@@ -159,6 +209,15 @@ export default function AdminCalendarHome({
   const datePickerRef = useRef<HTMLDivElement>(null);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const [offHoursBookingEnabled, setOffHoursBookingEnabled] = useState(true);
+  const [doubleBookingEnabled, setDoubleBookingEnabled] = useState(true);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [calendarPreferencesOpen, setCalendarPreferencesOpen] = useState(false);
+  const [bookingStatsExpanded, setBookingStatsExpanded] = useState(false);
   const [createServiceOpen, setCreateServiceOpen] = useState(false);
   const [createClassOpen, setCreateClassOpen] = useState(false);
   const [createCustomerOpen, setCreateCustomerOpen] = useState(false);
@@ -184,6 +243,19 @@ export default function AdminCalendarHome({
     return formatWeekHeader(weekStartYmd, weekEndYmd, timeZone);
   }, [anchor, timeZone, view, weekEndYmd, weekStartYmd]);
 
+  const bookingStatsRangeLabel = useMemo(() => {
+    if (view === "day") {
+      return formatDateInTimeZone(anchor, timeZone, { day: "numeric", month: "short" });
+    }
+    if (view === "month") {
+      return formatDateInTimeZone(anchor, timeZone, { month: "long", year: "numeric" });
+    }
+    const start = ymdToWallClockDate(weekStartYmd);
+    const end = ymdToWallClockDate(weekEndYmd);
+    const fmt = (d: Date) => formatDateInTimeZone(d, timeZone, { day: "numeric", month: "short" });
+    return `${fmt(start)} - ${fmt(end)}`;
+  }, [anchor, timeZone, view, weekEndYmd, weekStartYmd]);
+
   const dayColumns = useMemo(() => {
     if (view === "day") return [ymdToWallClockDate(getYMDInTimeZone(anchor, timeZone))];
     if (view === "week") {
@@ -193,6 +265,20 @@ export default function AdminCalendarHome({
   }, [anchor, timeZone, view, weekStartYmd]);
 
   const [events, setEvents] = useState<CalEvent[]>([]);
+
+  const bookingStats = useMemo(() => {
+    const bookings = events.length;
+    const confirmed = events.filter(
+      (e) => e.appointmentStatus === "confirmed" || e.appointmentStatus === "completed",
+    ).length;
+    const rejected = events.filter(
+      (e) =>
+        e.approvalStatus === "rejected" ||
+        e.appointmentStatus === "cancelled" ||
+        e.appointmentStatus === "no_show",
+    ).length;
+    return { bookings, confirmed, rejected };
+  }, [events]);
 
   useEffect(() => {
     if (!therapistId) {
@@ -312,6 +398,51 @@ export default function AdminCalendarHome({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [actionsMenuOpen]);
 
+  useEffect(() => {
+    if (!viewMenuOpen) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (viewMenuRef.current && !viewMenuRef.current.contains(e.target as Node)) {
+        setViewMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [viewMenuOpen]);
+
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [moreMenuOpen]);
+
+  useEffect(() => {
+    if (!moreMenuOpen) setBookingStatsExpanded(false);
+  }, [moreMenuOpen]);
+
+  const handlePrintCalendar = useCallback(() => {
+    setMoreMenuOpen(false);
+    window.setTimeout(() => window.print(), 100);
+  }, []);
+
+  const copyBookingPageUrl = useCallback(async () => {
+    const origin = window.location.origin;
+    const url = therapistId
+      ? `${origin}/book?therapist=${encodeURIComponent(therapistId)}`
+      : `${origin}/book`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      setShareCopied(false);
+    }
+  }, [therapistId]);
+
   const gridColsClass = view === "day" ? "grid-cols-[80px_1fr]" : "grid-cols-[80px_repeat(7,1fr)]";
 
   return (
@@ -369,6 +500,10 @@ export default function AdminCalendarHome({
           }}
         />
       ) : null}
+      <CalendarPreferencesDrawer
+        open={calendarPreferencesOpen}
+        onClose={() => setCalendarPreferencesOpen(false)}
+      />
       {editOpen && selected ? (
         <EditAppointmentModal
           appointment={selected}
@@ -470,36 +605,50 @@ export default function AdminCalendarHome({
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-4">
-            {/* <div className="flex items-center rounded-lg bg-mgmt-surface-container-low p-1">
+          <div className="flex items-center justify-end gap-2 sm:gap-3">
+            <div className="relative" ref={viewMenuRef}>
               <button
                 type="button"
-                onClick={() => setView("day")}
-                className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${
-                  view === "day" ? "rounded bg-white text-mgmt-primary shadow-sm" : "text-mgmt-on-surface-variant"
-                }`}
+                onClick={() => setViewMenuOpen((open) => !open)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full  text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container"
+                aria-label="Calendar view"
+                aria-haspopup="menu"
+                aria-expanded={viewMenuOpen}
               >
-                Day
+                <CalendarViewGlyph view={view} className="h-5 w-5" />
               </button>
-              <button
-                type="button"
-                onClick={() => setView("week")}
-                className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${
-                  view === "week" ? "rounded bg-white text-mgmt-primary shadow-sm" : "text-mgmt-on-surface-variant"
-                }`}
-              >
-                Week
-              </button>
-              <button
-                type="button"
-                onClick={() => setView("month")}
-                className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${
-                  view === "month" ? "rounded bg-white text-mgmt-primary shadow-sm" : "text-mgmt-on-surface-variant"
-                }`}
-              >
-                Month
-              </button>
-            </div> */}
+
+              {viewMenuOpen ? (
+                <div
+                  className="absolute right-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-xl border border-mgmt-outline-variant/20 bg-white py-1 shadow-lg"
+                  role="menu"
+                >
+                  {CALENDAR_VIEW_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setView(option.value);
+                        setViewMenuOpen(false);
+                      }}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-mgmt-on-surface hover:bg-mgmt-surface-container-low"
+                    >
+                      <span className="flex w-5 shrink-0 items-center justify-center">
+                        {view === option.value ? (
+                          <MaterialSymbol name="check" className="text-[18px]" />
+                        ) : null}
+                      </span>
+                      <CalendarViewGlyph view={option.value} className="h-5 w-5 shrink-0" />
+                      <span className="min-w-0 flex-1 font-medium">{option.label}</span>
+                      <span className="shrink-0 text-xs font-semibold text-mgmt-on-surface-variant">
+                        {option.shortcut}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
 
             <div className="relative" ref={actionsMenuRef}>
               <button
@@ -582,6 +731,137 @@ export default function AdminCalendarHome({
                 </div>
               ) : null}
             </div>
+
+            <div className="relative" ref={moreMenuRef}>
+              <button
+                type="button"
+                onClick={() => setMoreMenuOpen((open) => !open)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-mgmt-on-surface-variant transition-colors hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface"
+                aria-label="More options"
+                aria-haspopup="menu"
+                aria-expanded={moreMenuOpen}
+              >
+                <MaterialSymbol name="more_vert" className="text-[22px]" />
+              </button>
+
+              {moreMenuOpen ? (
+                <div
+                  className="absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-xl border border-mgmt-outline-variant/20 bg-white py-1 shadow-lg"
+                  role="menu"
+                >
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <span className="text-sm text-mgmt-on-surface">Enable off-hours booking</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={offHoursBookingEnabled}
+                      onClick={() => setOffHoursBookingEnabled((on) => !on)}
+                      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                        offHoursBookingEnabled ? "bg-mgmt-on-surface" : "bg-mgmt-surface-container-high"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                          offHoursBookingEnabled ? "left-5" : "left-0.5"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <span className="text-sm text-mgmt-on-surface">Enable double booking</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={doubleBookingEnabled}
+                      onClick={() => setDoubleBookingEnabled((on) => !on)}
+                      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                        doubleBookingEnabled ? "bg-mgmt-on-surface" : "bg-mgmt-surface-container-high"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                          doubleBookingEnabled ? "left-5" : "left-0.5"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMoreMenuOpen(false);
+                      setCalendarPreferencesOpen(true);
+                    }}
+                    className="flex w-full px-4 py-2.5 text-left text-sm text-mgmt-on-surface hover:bg-mgmt-surface-container-low"
+                  >
+                    Calendar preferences
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={handlePrintCalendar}
+                    className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm text-mgmt-on-surface hover:bg-mgmt-surface-container-low"
+                  >
+                    <span>Print calendar</span>
+                    <span className="text-xs font-medium text-mgmt-on-surface-variant">CTRL + P</span>
+                  </button>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setBookingStatsExpanded((open) => !open)}
+                      className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-sm text-mgmt-on-surface ${
+                        bookingStatsExpanded
+                          ? "bg-mgmt-surface-container-low"
+                          : "hover:bg-mgmt-surface-container-low"
+                      }`}
+                    >
+                      <span>View booking stats</span>
+                      <MaterialSymbol
+                        name={bookingStatsExpanded ? "expand_less" : "expand_more"}
+                        className="text-[20px] text-mgmt-on-surface-variant"
+                      />
+                    </button>
+                    {bookingStatsExpanded ? (
+                      <div className="border-t border-mgmt-outline-variant/10 bg-mgmt-surface-container-low px-4 pb-4 pt-3">
+                        <p className="text-center text-sm text-mgmt-on-surface-variant">
+                          {bookingStatsRangeLabel}
+                        </p>
+                        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                          <div>
+                            <p className="text-xl font-bold text-mgmt-on-surface">
+                              {bookingStats.bookings}
+                            </p>
+                            <p className="mt-1 text-xs text-mgmt-on-surface-variant">Bookings</p>
+                          </div>
+                          <div>
+                            <p className="text-xl font-bold text-mgmt-on-surface">
+                              {bookingStats.confirmed}
+                            </p>
+                            <p className="mt-1 text-xs text-mgmt-on-surface-variant">Confirmed</p>
+                          </div>
+                          <div>
+                            <p className="text-xl font-bold text-mgmt-on-surface">
+                              {bookingStats.rejected}
+                            </p>
+                            <p className="mt-1 text-xs text-mgmt-on-surface-variant">Rejected</p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void copyBookingPageUrl()}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-mgmt-outline-variant px-4 text-sm font-semibold text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container-low"
+              aria-label="Share booking page"
+            >
+              <MaterialSymbol name="upload" className="text-[20px]" />
+              {shareCopied ? "Copied" : "Share"}
+            </button>
           </div>
         </header>
 

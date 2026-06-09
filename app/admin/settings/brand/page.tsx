@@ -250,7 +250,7 @@ export default function AdminSettingsBrandPage() {
           </div>
           <button
             type="button"
-            className="shrink-0 rounded-xl bg-black px-8 py-2.5 text-sm font-bold text-white transition-transform active:scale-[0.98] hover:opacity-90"
+            className="shrink-0 rounded-xl bg-mgmt-primary px-4 py-2 text-sm font-semibold text-mgmt-on-primary transition-opacity hover:opacity-90"
           >
             Save
           </button>

@@ -20,7 +20,7 @@ export default function SettingsHeader({
   }, [displayName]);
 
   return (
-    <div className="bg-mgmt-surface">
+    <div className="bg-mgmt-surface-container-lowest">
       <header className="px-4 pt-6 pb-4 sm:px-6 lg:px-10 lg:pt-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div className="flex min-w-0 items-start gap-4">
