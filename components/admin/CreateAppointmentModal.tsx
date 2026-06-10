@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import { isRangeBlocked } from "@/lib/calendar/timeBlocks";
+import { isRangeWithinWorkingHours, type WorkingHoursSlot } from "@/lib/calendar/workingHours";
 import {
   formatDateInTimeZone,
   formatTimeInTimeZone,
@@ -93,6 +95,12 @@ export type CreateAppointmentInitialSchedule = {
   durationMin: number;
 };
 
+export type BlockedTimeBlock = {
+  startUtc: Date;
+  endUtc: Date;
+  label?: string;
+};
+
 export default function CreateAppointmentModal({
   open,
   onClose,
@@ -100,12 +108,18 @@ export default function CreateAppointmentModal({
   therapistTimezone,
   onCreated,
   initialSchedule,
+  blockedTimeBlocks = [],
+  workingHours = [],
+  offHoursBookingEnabled = false,
 }: {
   open: boolean;
   onClose: () => void;
   therapistId?: string;
   therapistTimezone?: string;
   initialSchedule?: CreateAppointmentInitialSchedule | null;
+  blockedTimeBlocks?: BlockedTimeBlock[];
+  workingHours?: WorkingHoursSlot[];
+  offHoursBookingEnabled?: boolean;
   onCreated?: (created: {
     appointmentId: string;
     therapistId: string;
@@ -186,6 +200,43 @@ export default function CreateAppointmentModal({
     });
     return `${dayLabel} · ${formatTimeInTimeZone(startUtc, timeZone)} — ${formatTimeInTimeZone(endUtc, timeZone)}`;
   }, [date, durationMin, startTime, timeZone]);
+
+  const serviceScheduleStart = useMemo(() => {
+    const [y, m, d] = date.split("-").map((x) => Number(x));
+    return zonedLocalYmdTimeToUtc(
+      { year: y ?? 0, month: m ?? 1, day: d ?? 1 },
+      startTime,
+      timeZone,
+    );
+  }, [date, startTime, timeZone]);
+
+  const serviceScheduleEnd = useMemo(
+    () => addMinutes(serviceScheduleStart, durationMin),
+    [serviceScheduleStart, durationMin],
+  );
+
+  const withinWorkingHours = useMemo(() => {
+    if (offHoursBookingEnabled) return true;
+    if (!workingHours.length) return false;
+    return isRangeWithinWorkingHours(
+      serviceScheduleStart,
+      serviceScheduleEnd,
+      workingHours,
+      timeZone,
+    );
+  }, [
+    offHoursBookingEnabled,
+    workingHours,
+    serviceScheduleStart,
+    serviceScheduleEnd,
+    timeZone,
+  ]);
+
+  const slotLockedFromCalendar =
+    Boolean(initialSchedule) && !offHoursBookingEnabled && !withinWorkingHours;
+
+  const workingHoursUnavailableMessage =
+    "Therapist is not available at this time. This slot is outside their working hours.";
 
   const eventScheduleLabel = useMemo(() => {
     const [y, m, d] = date.split("-").map((x) => Number(x));
@@ -354,7 +405,9 @@ export default function CreateAppointmentModal({
   if (!open) return null;
 
   const canCreateService =
-    tab === "service" && Boolean(serviceId && clientId && selectedTherapistId);
+    tab === "service" &&
+    Boolean(serviceId && clientId && selectedTherapistId) &&
+    (offHoursBookingEnabled || withinWorkingHours);
   const canCreateClass =
     tab === "class" &&
     Boolean(
@@ -438,6 +491,11 @@ export default function CreateAppointmentModal({
             ) : null}
             {tab === "service" ? (
               <>
+                {!offHoursBookingEnabled && !withinWorkingHours ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    {workingHoursUnavailableMessage}
+                  </div>
+                ) : null}
                 <div className="flex items-start gap-4">
                   <div className="mt-0.5">
                     <div className="h-5 w-5 rounded-full border-2 border-slate-300" />
@@ -540,7 +598,8 @@ export default function CreateAppointmentModal({
                           type="date"
                           value={date}
                           onChange={(e) => setDate(e.target.value)}
-                          className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                          disabled={slotLockedFromCalendar}
+                          className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                       </div>
                       <div className="col-span-3 sm:col-span-1">
@@ -551,7 +610,8 @@ export default function CreateAppointmentModal({
                           type="time"
                           value={startTime}
                           onChange={(e) => setStartTime(e.target.value)}
-                          className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                          disabled={slotLockedFromCalendar}
+                          className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                       </div>
                       <div className="col-span-3 sm:col-span-1">
@@ -561,7 +621,8 @@ export default function CreateAppointmentModal({
                         <select
                           value={durationMin}
                           onChange={(e) => setDurationMin(Number(e.target.value))}
-                          className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                          disabled={slotLockedFromCalendar}
+                          className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {[15, 30, 45, 60, 75, 90, 120].map((m) => (
                             <option key={m} value={m}>
@@ -1111,13 +1172,43 @@ export default function CreateAppointmentModal({
               disabled={submitting || loadingData || !canCreate}
               className="rounded-xl bg-mgmt-primary px-4 py-2 text-sm font-semibold text-mgmt-on-primary transition-opacity hover:opacity-90 disabled:opacity-40"
               onClick={async () => {
+                const blockedRangeError = "This time overlaps a therapist break or time off.";
+
                 if (tab === "class") {
                   if (!canCreateClass) return;
+                  if (classStartAt && classEndAt) {
+                    const classStart = new Date(classStartAt);
+                    const classEnd = new Date(classEndAt);
+                    if (
+                      !Number.isNaN(classStart.getTime()) &&
+                      !Number.isNaN(classEnd.getTime()) &&
+                      classEnd > classStart &&
+                      isRangeBlocked(classStart, classEnd, blockedTimeBlocks)
+                    ) {
+                      setErrorMsg(blockedRangeError);
+                      return;
+                    }
+                  }
                   onClose();
                   return;
                 }
                 if (tab === "event") {
                   if (!canCreateEvent) return;
+                  const [y, m, d] = date.split("-").map((x) => Number(x));
+                  const eventStart = zonedLocalYmdTimeToUtc(
+                    { year: y ?? 0, month: m ?? 1, day: d ?? 1 },
+                    eventStartTime,
+                    timeZone,
+                  );
+                  const eventEnd = zonedLocalYmdTimeToUtc(
+                    { year: y ?? 0, month: m ?? 1, day: d ?? 1 },
+                    eventEndTime,
+                    timeZone,
+                  );
+                  if (eventEnd > eventStart && isRangeBlocked(eventStart, eventEnd, blockedTimeBlocks)) {
+                    setErrorMsg(blockedRangeError);
+                    return;
+                  }
                   onClose();
                   return;
                 }
@@ -1134,16 +1225,21 @@ export default function CreateAppointmentModal({
                   setErrorMsg("Select a service and a client.");
                   return;
                 }
+                if (!offHoursBookingEnabled && !withinWorkingHours) {
+                  setErrorMsg(workingHoursUnavailableMessage);
+                  return;
+                }
                 setSubmitting(true);
                 setErrorMsg(null);
                 try {
-                  const [y, m, d] = date.split("-").map((x) => Number(x));
-                  const start = zonedLocalYmdTimeToUtc(
-                    { year: y ?? 0, month: m ?? 1, day: d ?? 1 },
-                    startTime,
-                    timeZone,
-                  );
-                  const end = addMinutes(start, durationMin);
+                  const start = serviceScheduleStart;
+                  const end = serviceScheduleEnd;
+
+                  if (isRangeBlocked(start, end, blockedTimeBlocks)) {
+                    setErrorMsg(blockedRangeError);
+                    setSubmitting(false);
+                    return;
+                  }
 
                   const res = await fetch("/api/v1/admin/appointments", {
                     method: "POST",
@@ -1156,6 +1252,7 @@ export default function CreateAppointmentModal({
                       status: appointmentStatus,
                       startAt: start.toISOString(),
                       endAt: end.toISOString(),
+                      allowOffHours: offHoursBookingEnabled,
                       note: notes || undefined,
                     }),
                   });

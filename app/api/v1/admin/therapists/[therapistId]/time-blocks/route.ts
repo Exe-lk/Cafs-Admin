@@ -55,7 +55,7 @@ export async function GET(
       .eq("therapist_id", therapistId)
       .order("start_at", { ascending: true });
 
-    if (fromD) q = q.gte("start_at", fromD.toISOString());
+    if (fromD) q = q.gt("end_at", fromD.toISOString());
     if (toD) q = q.lt("start_at", toD.toISOString());
 
     // Convention-based scoping so UI can separate time-off vs breaks without new tables.

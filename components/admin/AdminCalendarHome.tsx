@@ -11,6 +11,12 @@ import EditAppointmentModal, { type AdminEditableAppointment } from "@/component
 import EditTherapistClassModal from "@/components/admin/EditTherapistClassModal";
 import EditTherapistServiceModal from "@/components/admin/EditTherapistServiceModal";
 import {
+  isRangeBlocked,
+  segmentsInHour,
+  type TimeBlockKind,
+} from "@/lib/calendar/timeBlocks";
+import { offHoursSegmentsInHour, type WorkingHoursSlot } from "@/lib/calendar/workingHours";
+import {
   addDaysToYMD,
   formatDateInTimeZone,
   formatTimeInTimeZone,
@@ -104,6 +110,14 @@ type CalEvent = {
     | "completed"
     | "no_show"
     | "expired";
+};
+
+type CalTimeBlock = {
+  id: string;
+  startUtc: Date;
+  endUtc: Date;
+  kind: TimeBlockKind;
+  label: string;
 };
 
 type ApiEnvelope<T> = {
@@ -213,7 +227,7 @@ export default function AdminCalendarHome({
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
-  const [offHoursBookingEnabled, setOffHoursBookingEnabled] = useState(true);
+  const [offHoursBookingEnabled, setOffHoursBookingEnabled] = useState(false);
   const [doubleBookingEnabled, setDoubleBookingEnabled] = useState(true);
   const [shareCopied, setShareCopied] = useState(false);
   const [calendarPreferencesOpen, setCalendarPreferencesOpen] = useState(false);
@@ -265,6 +279,8 @@ export default function AdminCalendarHome({
   }, [anchor, timeZone, view, weekStartYmd]);
 
   const [events, setEvents] = useState<CalEvent[]>([]);
+  const [timeBlocks, setTimeBlocks] = useState<CalTimeBlock[]>([]);
+  const [workingHours, setWorkingHours] = useState<WorkingHoursSlot[]>([]);
 
   const bookingStats = useMemo(() => {
     const bookings = events.length;
@@ -283,6 +299,8 @@ export default function AdminCalendarHome({
   useEffect(() => {
     if (!therapistId) {
       setEvents([]);
+      setTimeBlocks([]);
+      setWorkingHours([]);
       setLoading(false);
       setErrorMsg(null);
       return;
@@ -317,6 +335,19 @@ export default function AdminCalendarHome({
             status: string;
             proofUrl?: string | null;
           }>;
+          timeBlocks?: Array<{
+            timeBlockId: string;
+            startAt: string;
+            endAt: string;
+            kind: TimeBlockKind;
+            label: string;
+          }>;
+          workingHours?: Array<{
+            dayOfWeek: number;
+            startTime: string;
+            endTime: string;
+            isActive: boolean;
+          }>;
         }>;
         if (!res.ok || json.status !== "success" || !json.data) {
           throw new Error(json.message || `Failed to load calendar (HTTP ${res.status})`);
@@ -345,11 +376,36 @@ export default function AdminCalendarHome({
           });
         }
 
+        const nextBlocks: CalTimeBlock[] = [];
+        for (const tb of json.data.timeBlocks ?? []) {
+          const startUtc = parseDbUtcTimestamp(tb.startAt);
+          const endUtc = parseDbUtcTimestamp(tb.endAt);
+          if (!startUtc || !endUtc) continue;
+          nextBlocks.push({
+            id: tb.timeBlockId,
+            startUtc,
+            endUtc,
+            kind: tb.kind,
+            label: tb.label,
+          });
+        }
+
         setEvents(nextEvents);
+        setTimeBlocks(nextBlocks);
+        setWorkingHours(
+          (json.data.workingHours ?? []).map((wh) => ({
+            dayOfWeek: wh.dayOfWeek,
+            startTime: wh.startTime,
+            endTime: wh.endTime,
+            isActive: wh.isActive,
+          })),
+        );
       } catch (e) {
         if ((e as any)?.name === "AbortError") return;
         setErrorMsg(e instanceof Error ? e.message : "Failed to load calendar");
         setEvents([]);
+        setTimeBlocks([]);
+        setWorkingHours([]);
       } finally {
         setLoading(false);
       }
@@ -456,6 +512,13 @@ export default function AdminCalendarHome({
         therapistId={therapistId}
         therapistTimezone={timeZone}
         initialSchedule={createInitialSchedule}
+        blockedTimeBlocks={timeBlocks.map((tb) => ({
+          startUtc: tb.startUtc,
+          endUtc: tb.endUtc,
+          label: tb.label,
+        }))}
+        workingHours={workingHours}
+        offHoursBookingEnabled={offHoursBookingEnabled}
         onCreated={() => {
           setReloadKey((k) => k + 1);
         }}
@@ -937,6 +1000,12 @@ export default function AdminCalendarHome({
                       timeZone={timeZone}
                       dayColumns={dayColumns}
                       events={events}
+                      timeBlocks={timeBlocks}
+                      workingHours={workingHours}
+                      offHoursBookingEnabled={offHoursBookingEnabled}
+                      onBlockedSlot={() => {
+                        setErrorMsg("This time is blocked (break or time off).");
+                      }}
                       onEmptySlot={(colDate) => {
                         setCreateInitialSchedule(slotToInitialSchedule(colDate, hour));
                         setCreateOpen(true);
@@ -986,7 +1055,11 @@ function TimeRow({
   timeZone,
   dayColumns,
   events,
+  timeBlocks,
+  workingHours,
+  offHoursBookingEnabled,
   onEmptySlot,
+  onBlockedSlot,
   onSelectEvent,
 }: {
   timeLabel: string;
@@ -994,7 +1067,11 @@ function TimeRow({
   timeZone: string;
   dayColumns: Date[];
   events: CalEvent[];
+  timeBlocks: CalTimeBlock[];
+  workingHours: WorkingHoursSlot[];
+  offHoursBookingEnabled: boolean;
   onEmptySlot: (colDate: Date) => void;
+  onBlockedSlot: () => void;
   onSelectEvent: (ev: CalEvent) => void;
 }) {
   return (
@@ -1008,21 +1085,63 @@ function TimeRow({
           const evYmd = getYMDInTimeZone(ev.startUtc, timeZone);
           return sameYMD(evYmd, colYmd) && getHourInTimeZone(ev.startUtc, timeZone) === hour;
         });
+        const slotStart = zonedLocalYmdTimeToUtc(colYmd, `${pad2(hour)}:00`, timeZone);
+        const slotEnd = new Date(slotStart.getTime() + 60 * 60_000);
+        const slotBlocked = isRangeBlocked(
+          slotStart,
+          slotEnd,
+          timeBlocks.map((tb) => ({ startUtc: tb.startUtc, endUtc: tb.endUtc })),
+        );
+        const blockSegments = timeBlocks
+          .map((tb) =>
+            segmentsInHour(
+              { startUtc: tb.startUtc, endUtc: tb.endUtc, label: tb.label },
+              colYmd,
+              hour,
+              timeZone,
+            ),
+          )
+          .filter((seg): seg is NonNullable<typeof seg> => seg !== null);
+
+        const offHoursSegments =
+          !offHoursBookingEnabled && workingHours.length
+            ? offHoursSegmentsInHour(workingHours, colYmd, hour, timeZone)
+            : [];
+
+        function handleSlotActivate() {
+          if (slotBlocked) {
+            onBlockedSlot();
+            return;
+          }
+          onEmptySlot(colDate);
+        }
+
         return (
           <div
             key={`${colDate.toISOString()}-${hour}`}
             role="button"
             tabIndex={0}
-            onClick={() => onEmptySlot(colDate)}
+            onClick={handleSlotActivate}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                onEmptySlot(colDate);
+                handleSlotActivate();
               }
             }}
-            className="group relative min-h-[80px] border-b border-r border-mgmt-outline-variant/5 bg-white last:border-r-0 hover:bg-mgmt-surface-container-low text-left cursor-pointer"
+            className={`group relative min-h-[80px] border-b border-r border-mgmt-outline-variant/5 bg-white last:border-r-0 text-left ${
+              slotBlocked
+                ? "cursor-not-allowed"
+                : "cursor-pointer hover:bg-mgmt-surface-container-low"
+            }`}
             aria-label={`Create appointment ${colDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} at ${timeLabel}`}
+            aria-disabled={slotBlocked}
           >
+            {offHoursSegments.map((seg, idx) => (
+              <OffHoursOverlay key={`${colDate.toISOString()}-${hour}-off-${idx}`} segment={seg} />
+            ))}
+            {blockSegments.map((seg, idx) => (
+              <TimeBlockOverlay key={`${colDate.toISOString()}-${hour}-block-${idx}`} segment={seg} />
+            ))}
             {cellEvents.map((ev) => (
               <EventBlock key={ev.id} ev={ev} onClick={() => onSelectEvent(ev)} />
             ))}
@@ -1030,6 +1149,41 @@ function TimeRow({
         );
       })}
     </>
+  );
+}
+
+function OffHoursOverlay({ segment }: { segment: { topPct: number; heightPct: number } }) {
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 z-[3] bg-mgmt-surface-container-low/60"
+      style={{
+        top: `${segment.topPct}%`,
+        height: `${segment.heightPct}%`,
+      }}
+      aria-hidden
+    />
+  );
+}
+
+function TimeBlockOverlay({
+  segment,
+}: {
+  segment: { topPct: number; heightPct: number; label?: string };
+}) {
+  const showLabel = segment.heightPct >= 35;
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 z-[5] border-y border-slate-200/80 bg-slate-100/90"
+      style={{
+        top: `${segment.topPct}%`,
+        height: `${segment.heightPct}%`,
+      }}
+      aria-hidden
+    >
+      {showLabel && segment.label ? (
+        <p className="truncate px-1.5 py-0.5 text-[0.6rem] font-medium text-slate-500">{segment.label}</p>
+      ) : null}
+    </div>
   );
 }
 

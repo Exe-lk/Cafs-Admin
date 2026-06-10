@@ -3,6 +3,8 @@ import { ok, err } from "@/lib/api/envelope";
 import { getAuthContext, requireRoleService } from "@/lib/api/auth";
 import { parseIsoDateParam } from "@/lib/api/http";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { parseTimeBlockKindAndLabel } from "@/lib/calendar/timeBlocks";
+import { timeToHHMM, type WorkingHoursSlot } from "@/lib/calendar/workingHours";
 import { formatDbUtcTimestamp, normalizeTimeZone, parseDbUtcTimestamp } from "@/lib/timezone";
 
 const BANK_SLIPS_BUCKET = "bank-slips";
@@ -149,6 +151,15 @@ export async function GET(request: NextRequest) {
   );
 
   let therapistTimezone: string | undefined;
+  let timeBlocks: Array<{
+    timeBlockId: string;
+    startAt: string;
+    endAt: string;
+    kind: "time_off" | "break";
+    label: string;
+  }> = [];
+  let workingHours: WorkingHoursSlot[] = [];
+
   if (therapistId) {
     const { data: tzRow } = await adminSupabase
       .from("therapists")
@@ -158,12 +169,70 @@ export async function GET(request: NextRequest) {
     therapistTimezone = normalizeTimeZone(
       String((tzRow as { timezone?: unknown } | null)?.timezone ?? ""),
     );
+
+    if (fromD && toD) {
+      const blockQ = adminSupabase
+        .from("therapist_time_blocks")
+        .select("time_block_id,start_at,end_at,reason")
+        .eq("therapist_id", therapistId)
+        .gt("end_at", fromD.toISOString())
+        .lt("start_at", toD.toISOString())
+        .or("reason.like.time-off:%,reason.like.break:%")
+        .order("start_at", { ascending: true });
+
+      const { data: blockRows, error: blockErr } = await blockQ;
+      if (blockErr) return err(blockErr.message, 400);
+
+      timeBlocks = (blockRows ?? [])
+        .map((row) => {
+          const b = (row && typeof row === "object" ? (row as Record<string, unknown>) : {}) as Record<
+            string,
+            unknown
+          >;
+          const reason = b.reason === null ? null : String(b.reason);
+          const parsed = parseTimeBlockKindAndLabel(reason);
+          if (!parsed) return null;
+          const startUtc = parseDbUtcTimestamp(String(b.start_at));
+          const endUtc = parseDbUtcTimestamp(String(b.end_at));
+          if (!startUtc || !endUtc) return null;
+          return {
+            timeBlockId: String(b.time_block_id),
+            startAt: formatDbUtcTimestamp(startUtc),
+            endAt: formatDbUtcTimestamp(endUtc),
+            kind: parsed.kind,
+            label: parsed.label,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+    }
+
+    const { data: whRows, error: whErr } = await adminSupabase
+      .from("therapist_working_hours")
+      .select("day_of_week,start_time,end_time,is_active")
+      .eq("therapist_id", therapistId)
+      .order("day_of_week", { ascending: true });
+    if (whErr) return err(whErr.message, 400);
+
+    workingHours = (whRows ?? []).map((row) => {
+      const r = (row && typeof row === "object" ? (row as Record<string, unknown>) : {}) as Record<
+        string,
+        unknown
+      >;
+      return {
+        dayOfWeek: Number(r.day_of_week),
+        startTime: timeToHHMM(String(r.start_time ?? "00:00:00")),
+        endTime: timeToHHMM(String(r.end_time ?? "00:00:00")),
+        isActive: Boolean(r.is_active),
+      };
+    });
   }
 
   const res = ok(
     {
       items,
       therapistTimezone,
+      timeBlocks,
+      workingHours,
     },
     "Team calendar retrieved successfully",
   );
