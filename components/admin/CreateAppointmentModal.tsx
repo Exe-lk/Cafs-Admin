@@ -2,6 +2,12 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import SearchableSelect from "@/components/admin/SearchableSelect";
+import {
+  isAppointmentStartInPast,
+  minBookableDateInputInTimeZone,
+  PAST_APPOINTMENT_MESSAGE,
+} from "@/lib/calendar/scheduling";
 import { isRangeBlocked } from "@/lib/calendar/timeBlocks";
 import { isRangeWithinWorkingHours, type WorkingHoursSlot } from "@/lib/calendar/workingHours";
 import {
@@ -12,25 +18,6 @@ import {
 } from "@/lib/timezone";
 
 type TabKey = "service" | "class" | "event" | "reminder";
-
-type AppointmentStatus =
-  | "pending_payment"
-  | "pending_confirmation"
-  | "confirmed"
-  | "cancelled"
-  | "completed"
-  | "no_show"
-  | "expired";
-
-const APPOINTMENT_STATUSES: Array<{ value: AppointmentStatus; label: string }> = [
-  { value: "pending_payment", label: "Pending payment" },
-  { value: "pending_confirmation", label: "Pending confirmation" },
-  { value: "confirmed", label: "Confirmed" },
-  { value: "cancelled", label: "Cancelled" },
-  { value: "completed", label: "Completed" },
-  { value: "no_show", label: "No show" },
-  { value: "expired", label: "Expired" },
-];
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -126,6 +113,8 @@ export default function CreateAppointmentModal({
     startAt: string;
     endAt: string;
     appointmentType: "online" | "in_person";
+    emailSent?: boolean;
+    emailError?: string;
   }) => void;
 }) {
   const titleId = useId();
@@ -144,7 +133,6 @@ export default function CreateAppointmentModal({
   const [selectedTherapistId, setSelectedTherapistId] = useState("");
   const [clientId, setClientId] = useState("");
   const [appointmentType, setAppointmentType] = useState<"online" | "in_person">("online");
-  const [appointmentStatus, setAppointmentStatus] = useState<AppointmentStatus>("pending_payment");
   const [date, setDate] = useState(() => toDateInputValue(new Date()));
   const [startTime, setStartTime] = useState(() => {
     const now = new Date();
@@ -238,6 +226,9 @@ export default function CreateAppointmentModal({
   const workingHoursUnavailableMessage =
     "Therapist is not available at this time. This slot is outside their working hours.";
 
+  const scheduleInPast = isAppointmentStartInPast(serviceScheduleStart);
+  const minBookableDate = minBookableDateInputInTimeZone(timeZone);
+
   const eventScheduleLabel = useMemo(() => {
     const [y, m, d] = date.split("-").map((x) => Number(x));
     const startUtc = zonedLocalYmdTimeToUtc(
@@ -300,7 +291,6 @@ export default function CreateAppointmentModal({
       setSelectedTherapistId(therapistId ?? "");
       setClientId("");
       setAppointmentType("online");
-      setAppointmentStatus("pending_payment");
       setNotes("");
       setClassId("");
       setClassTitle("");
@@ -402,11 +392,21 @@ export default function CreateAppointmentModal({
     return () => ac.abort();
   }, [open]);
 
+  const clientOptions = useMemo(
+    () =>
+      clients.map((client) => ({
+        value: client.clientId,
+        label: client.fullName,
+      })),
+    [clients],
+  );
+
   if (!open) return null;
 
   const canCreateService =
     tab === "service" &&
     Boolean(serviceId && clientId && selectedTherapistId) &&
+    !scheduleInPast &&
     (offHoursBookingEnabled || withinWorkingHours);
   const canCreateClass =
     tab === "class" &&
@@ -491,6 +491,11 @@ export default function CreateAppointmentModal({
             ) : null}
             {tab === "service" ? (
               <>
+                {scheduleInPast ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    {PAST_APPOINTMENT_MESSAGE}
+                  </div>
+                ) : null}
                 {!offHoursBookingEnabled && !withinWorkingHours ? (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     {workingHoursUnavailableMessage}
@@ -573,30 +578,12 @@ export default function CreateAppointmentModal({
                       </div>
                       <div className="col-span-3 sm:col-span-1">
                         <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
-                          Appointment state
-                        </label>
-                        <select
-                          value={appointmentStatus}
-                          onChange={(e) =>
-                            setAppointmentStatus(e.target.value as AppointmentStatus)
-                          }
-                          className="mt-1 h-10 w-full rounded-lg bg-mgmt-surface-container-low px-3 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
-                          aria-label="Appointment state"
-                        >
-                          {APPOINTMENT_STATUSES.map((s) => (
-                            <option key={s.value} value={s.value}>
-                              {s.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="col-span-3 sm:col-span-1">
-                        <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
                           Date
                         </label>
                         <input
                           type="date"
                           value={date}
+                          min={minBookableDate}
                           onChange={(e) => setDate(e.target.value)}
                           disabled={slotLockedFromCalendar}
                           className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
@@ -642,22 +629,16 @@ export default function CreateAppointmentModal({
                       Add guest(s)
                     </label>
                     <div className="mt-2">
-                      <select
+                      <SearchableSelect
                         value={clientId}
-                        onChange={(e) => setClientId(e.target.value)}
-                        className={fieldClass}
-                        disabled={loadingData || clients.length === 0}
-                        aria-label="Client"
-                      >
-                        <option value="">
-                          {loadingData ? "Loading clients…" : "Select a client"}
-                        </option>
-                        {clients.map((c) => (
-                          <option key={c.clientId} value={c.clientId}>
-                            {c.fullName}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={setClientId}
+                        options={clientOptions}
+                        placeholder="Search or select a client"
+                        loading={loadingData}
+                        disabled={!loadingData && clients.length === 0}
+                        emptyLabel="No clients found"
+                        ariaLabel="Client"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1035,22 +1016,17 @@ export default function CreateAppointmentModal({
                       Add guest(s)
                     </label>
                     <div className="mt-2">
-                      <select
+                      <SearchableSelect
                         id="booking-event-guests"
                         value={eventClientId}
-                        onChange={(e) => setEventClientId(e.target.value)}
-                        className={fieldClass}
-                        disabled={loadingData || clients.length === 0}
-                      >
-                        <option value="">
-                          {loadingData ? "Loading clients…" : "Select a client"}
-                        </option>
-                        {clients.map((c) => (
-                          <option key={c.clientId} value={c.clientId}>
-                            {c.fullName}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={setEventClientId}
+                        options={clientOptions}
+                        placeholder="Search or select a client"
+                        loading={loadingData}
+                        disabled={!loadingData && clients.length === 0}
+                        emptyLabel="No clients found"
+                        ariaLabel="Event guest"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1229,6 +1205,10 @@ export default function CreateAppointmentModal({
                   setErrorMsg(workingHoursUnavailableMessage);
                   return;
                 }
+                if (isAppointmentStartInPast(serviceScheduleStart)) {
+                  setErrorMsg(PAST_APPOINTMENT_MESSAGE);
+                  return;
+                }
                 setSubmitting(true);
                 setErrorMsg(null);
                 try {
@@ -1249,7 +1229,6 @@ export default function CreateAppointmentModal({
                       therapistId: selectedTherapistId,
                       serviceId,
                       appointmentType,
-                      status: appointmentStatus,
                       startAt: start.toISOString(),
                       endAt: end.toISOString(),
                       allowOffHours: offHoursBookingEnabled,
@@ -1269,6 +1248,11 @@ export default function CreateAppointmentModal({
                     startAt: start.toISOString(),
                     endAt: end.toISOString(),
                     appointmentType,
+                    emailSent: json?.data?.emailSent === true,
+                    emailError:
+                      typeof json?.data?.emailError === "string"
+                        ? json.data.emailError
+                        : undefined,
                   });
                   onClose();
                 } catch (e) {

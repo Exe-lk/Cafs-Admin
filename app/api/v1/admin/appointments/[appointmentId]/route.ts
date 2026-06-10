@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { ok, err } from "@/lib/api/envelope";
 import { getAuthContext, requireRoleService } from "@/lib/api/auth";
 import { parseIsoDateParam } from "@/lib/api/http";
+import { validateAppointmentSchedule } from "@/lib/calendar/scheduling";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 
 type PutBody = {
@@ -43,6 +44,35 @@ export async function PUT(
     return err("Invalid JSON body", 400);
   }
 
+  const hasStartAt = typeof body.startAt === "string";
+  const hasEndAt = typeof body.endAt === "string";
+
+  if (hasStartAt || hasEndAt) {
+    const { data: existing, error: fetchError } = await adminSupabase
+      .from("appointments")
+      .select("start_at,end_at")
+      .eq("appointment_id", appointmentId)
+      .maybeSingle();
+
+    if (fetchError) return err(fetchError.message, 400);
+    if (!existing) return err("Appointment not found", 404);
+
+    const currentStart = parseIsoDateParam(String(existing.start_at));
+    const currentEnd = parseIsoDateParam(String(existing.end_at));
+    if (!currentStart || !currentEnd) return err("Appointment has invalid stored times", 400);
+
+    const nextStart = hasStartAt ? parseIsoDateParam(body.startAt!) : currentStart;
+    const nextEnd = hasEndAt ? parseIsoDateParam(body.endAt!) : currentEnd;
+    if (!nextStart) return err("Invalid startAt", 400);
+    if (!nextEnd) return err("Invalid endAt", 400);
+
+    const scheduleCheck = validateAppointmentSchedule({
+      startUtc: nextStart,
+      endUtc: nextEnd,
+    });
+    if (!scheduleCheck.ok) return err(scheduleCheck.message, 400);
+  }
+
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (typeof body.therapistId === "string") payload.therapist_id = body.therapistId;
   if (typeof body.serviceId === "string") payload.service_id = body.serviceId;
@@ -56,13 +86,13 @@ export async function PUT(
   if (typeof body.cancelReason === "string" && body.cancelReason.trim()) {
     payload.cancel_reason = body.cancelReason.trim();
   }
-  if (typeof body.startAt === "string") {
-    const d = parseIsoDateParam(body.startAt);
+  if (hasStartAt) {
+    const d = parseIsoDateParam(body.startAt!);
     if (!d) return err("Invalid startAt", 400);
     payload.start_at = d.toISOString();
   }
-  if (typeof body.endAt === "string") {
-    const d = parseIsoDateParam(body.endAt);
+  if (hasEndAt) {
+    const d = parseIsoDateParam(body.endAt!);
     if (!d) return err("Invalid endAt", 400);
     payload.end_at = d.toISOString();
   }
@@ -106,4 +136,3 @@ export async function DELETE(
   res.headers.set("Cache-Control", "no-store");
   return res;
 }
-

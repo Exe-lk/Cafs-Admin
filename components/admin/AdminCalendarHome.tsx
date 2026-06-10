@@ -11,6 +11,10 @@ import EditAppointmentModal, { type AdminEditableAppointment } from "@/component
 import EditTherapistClassModal from "@/components/admin/EditTherapistClassModal";
 import EditTherapistServiceModal from "@/components/admin/EditTherapistServiceModal";
 import {
+  isAppointmentStartInPast,
+  PAST_APPOINTMENT_MESSAGE,
+} from "@/lib/calendar/scheduling";
+import {
   isRangeBlocked,
   segmentsInHour,
   type TimeBlockKind,
@@ -218,6 +222,7 @@ export default function AdminCalendarHome({
   const [selected, setSelected] = useState<AdminEditableAppointment | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [noticeMsg, setNoticeMsg] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const datePickerRef = useRef<HTMLDivElement>(null);
@@ -519,8 +524,17 @@ export default function AdminCalendarHome({
         }))}
         workingHours={workingHours}
         offHoursBookingEnabled={offHoursBookingEnabled}
-        onCreated={() => {
+        onCreated={(created) => {
           setReloadKey((k) => k + 1);
+          if (created.emailSent === false) {
+            setNoticeMsg(
+              created.emailError
+                ? `Appointment created, but the client could not be emailed: ${created.emailError}`
+                : "Appointment created, but the client could not be emailed.",
+            );
+          } else {
+            setNoticeMsg(null);
+          }
         }}
       />
       {createServiceOpen ? (
@@ -934,6 +948,11 @@ export default function AdminCalendarHome({
               {errorMsg}
             </div>
           ) : null}
+          {noticeMsg ? (
+            <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-900">
+              {noticeMsg}
+            </div>
+          ) : null}
           {loading ? (
             <div className="shrink-0 border-b border-mgmt-outline-variant/10 bg-white/60 px-6 py-3 text-sm text-mgmt-on-surface-variant">
               Loading…
@@ -1006,6 +1025,9 @@ export default function AdminCalendarHome({
                       onBlockedSlot={() => {
                         setErrorMsg("This time is blocked (break or time off).");
                       }}
+                      onPastSlot={() => {
+                        setErrorMsg(PAST_APPOINTMENT_MESSAGE);
+                      }}
                       onEmptySlot={(colDate) => {
                         setCreateInitialSchedule(slotToInitialSchedule(colDate, hour));
                         setCreateOpen(true);
@@ -1060,6 +1082,7 @@ function TimeRow({
   offHoursBookingEnabled,
   onEmptySlot,
   onBlockedSlot,
+  onPastSlot,
   onSelectEvent,
 }: {
   timeLabel: string;
@@ -1072,6 +1095,7 @@ function TimeRow({
   offHoursBookingEnabled: boolean;
   onEmptySlot: (colDate: Date) => void;
   onBlockedSlot: () => void;
+  onPastSlot: () => void;
   onSelectEvent: (ev: CalEvent) => void;
 }) {
   return (
@@ -1092,6 +1116,8 @@ function TimeRow({
           slotEnd,
           timeBlocks.map((tb) => ({ startUtc: tb.startUtc, endUtc: tb.endUtc })),
         );
+        const slotInPast = isAppointmentStartInPast(slotStart);
+        const slotUnavailable = slotBlocked || slotInPast;
         const blockSegments = timeBlocks
           .map((tb) =>
             segmentsInHour(
@@ -1113,6 +1139,10 @@ function TimeRow({
             onBlockedSlot();
             return;
           }
+          if (slotInPast) {
+            onPastSlot();
+            return;
+          }
           onEmptySlot(colDate);
         }
 
@@ -1129,12 +1159,12 @@ function TimeRow({
               }
             }}
             className={`group relative min-h-[80px] border-b border-r border-mgmt-outline-variant/5 bg-white last:border-r-0 text-left ${
-              slotBlocked
-                ? "cursor-not-allowed"
+              slotUnavailable
+                ? "cursor-not-allowed bg-mgmt-surface-container-low/40"
                 : "cursor-pointer hover:bg-mgmt-surface-container-low"
             }`}
             aria-label={`Create appointment ${colDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} at ${timeLabel}`}
-            aria-disabled={slotBlocked}
+            aria-disabled={slotUnavailable}
           >
             {offHoursSegments.map((seg, idx) => (
               <OffHoursOverlay key={`${colDate.toISOString()}-${hour}-off-${idx}`} segment={seg} />

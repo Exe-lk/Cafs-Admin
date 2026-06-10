@@ -3,6 +3,12 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import {
+  isAppointmentStartInPast,
+  minBookableDateInputInTimeZone,
+  PAST_APPOINTMENT_MESSAGE,
+  validateAppointmentSchedule,
+} from "@/lib/calendar/scheduling";
+import {
   formatDateInTimeZone,
   formatTimeInTimeZone,
   normalizeTimeZone,
@@ -78,6 +84,7 @@ export default function EditAppointmentModal({
 
   const isApiBacked = Boolean(appointment.startAt && appointment.endAt);
   const busy = submitting || rejectSubmitting;
+  const minBookableDate = minBookableDateInputInTimeZone(timeZone);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -414,6 +421,7 @@ export default function EditAppointmentModal({
                       <input
                         type="date"
                         value={rescheduleDate}
+                        min={minBookableDate}
                         onChange={(e) => setRescheduleDate(e.target.value)}
                         className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
                       />
@@ -436,6 +444,11 @@ export default function EditAppointmentModal({
                       onClick={() => {
                         if (!rescheduleDate || !rescheduleTime) return;
                         const next = applyReschedule(draft, rescheduleDate, rescheduleTime, timeZone);
+                        if (next.startAt && isAppointmentStartInPast(new Date(next.startAt))) {
+                          setErrorMsg(PAST_APPOINTMENT_MESSAGE);
+                          return;
+                        }
+                        setErrorMsg(null);
                         setDraft(next);
                       }}
                     >
@@ -516,6 +529,15 @@ export default function EditAppointmentModal({
                           note: draft.notes ?? "",
                         };
                         if (hasTimeChange) {
+                          const scheduleCheck = validateAppointmentSchedule({
+                            startUtc: new Date(nextStartAt),
+                            endUtc: new Date(nextEndAt),
+                          });
+                          if (!scheduleCheck.ok) {
+                            setErrorMsg(scheduleCheck.message);
+                            setSubmitting(false);
+                            return;
+                          }
                           body.startAt = nextStartAt;
                           body.endAt = nextEndAt;
                         }
