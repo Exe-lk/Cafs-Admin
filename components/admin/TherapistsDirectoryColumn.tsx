@@ -118,7 +118,7 @@ export default function TherapistsDirectoryColumn({
                         className={
                           t.status === "Inactive"
                             ? "shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[0.65rem] font-bold text-slate-600"
-                            : "shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[0.65rem] font-bold text-emerald-700"
+                            : "shrink-0 rounded-full bg-[#F1F1F1] px-2 py-0.5 text-[0.65rem] font-bold text-slate-700"
                         }
                       >
                         {t.status ?? "Active"}

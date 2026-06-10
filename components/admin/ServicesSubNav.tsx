@@ -22,7 +22,7 @@ export default function ServicesSubNav() {
       data-purpose="secondary-navigation"
     >
       <div className="p-6">
-        <h2 className="text-xl font-bold text-mgmt-on-surface">Services</h2>
+        <h2 className="text-lg font-bold text-mgmt-on-surface">Services & Classes</h2>
       </div>
       <div className="flex-1 px-4 pb-6">
         <div className="mb-4">

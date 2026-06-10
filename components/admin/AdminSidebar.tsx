@@ -75,8 +75,8 @@ export default function AdminSidebar({
               className={cx(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 ease-in-out",
                 active
-                  ? "scale-95 border-l-4 border-emerald-700 bg-emerald-50 font-semibold text-slate-900"
-                  : "border-l-4 border-transparent text-slate-700 hover:bg-slate-50 hover:text-slate-900",
+                  ? "bg-[#F1F1F1] font-semibold text-slate-900"
+                  : "text-slate-700 hover:bg-slate-50 hover:text-slate-900",
               )}
             >
               <MaterialSymbol name={item.icon} className="text-[22px]" />

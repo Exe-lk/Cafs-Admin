@@ -118,14 +118,14 @@ export default function LoginToBookPanel({
 
         <button
           type="button"
-          className="w-full py-4 px-6 bg-primary-teal text-white font-semibold rounded-full hover:brightness-110 transition-all active:scale-[0.98] shadow-lg shadow-black/30"
+          className="w-full py-4 px-6 bg-cafs-black text-white font-semibold rounded-full hover:bg-neutral-800 transition-all active:scale-[0.98] shadow-lg shadow-black/30"
         >
           Create profile
         </button>
 
         <p className="mt-8 text-gray-400 text-sm">
           Need help?{" "}
-          <a className="text-mint-accent hover:underline" href="#">
+          <a className="text-gray-400 hover:underline" href="#">
             Contact support
           </a>
         </p>

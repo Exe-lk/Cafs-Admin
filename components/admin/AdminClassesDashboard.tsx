@@ -159,7 +159,7 @@ export default function AdminClassesDashboard() {
 
       <header className="sticky top-12 z-10 flex shrink-0 items-center justify-between gap-3 border-b border-mgmt-outline-variant bg-mgmt-surface-container-lowest px-4 py-5 sm:top-0 sm:px-6 lg:px-8 lg:py-6">
         <h1 className="min-w-0 truncate text-xl font-bold text-mgmt-on-surface sm:text-2xl">
-          Classes
+          Class types
         </h1>
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <button

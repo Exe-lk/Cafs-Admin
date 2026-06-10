@@ -93,7 +93,7 @@ function TherapistCard({
         <span className="min-w-0 flex-1 text-xs font-medium leading-snug">{badge}</span>
         <Link
           href={servicesHref}
-          className="shrink-0 rounded-md p-1 text-gray-500 transition-colors hover:bg-white/5 hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50"
+          className="shrink-0 rounded-md p-1 text-gray-500 transition-colors hover:bg-white/5 hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500/50"
           aria-label={`View services for ${name}`}
         >
           <ChevronRightIcon className="h-4 w-4" />

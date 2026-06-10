@@ -88,7 +88,7 @@ export default function TherapistDetailModal({ open, onClose, therapist }: Props
                 </div>
                 <Link
                   href={`/services?${new URLSearchParams({ therapist: therapist.name }).toString()}`}
-                  className="inline-flex shrink-0 items-center justify-center rounded-full bg-teal-600 px-6 py-2 text-sm font-bold text-white transition-colors hover:bg-teal-500"
+                  className="inline-flex shrink-0 items-center justify-center rounded-full bg-neutral-900 px-6 py-2 text-sm font-bold text-white transition-colors hover:bg-neutral-800"
                   onClick={onClose}
                 >
                   Services

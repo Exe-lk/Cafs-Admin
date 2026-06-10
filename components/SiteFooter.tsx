@@ -9,7 +9,7 @@ export default function SiteFooter() {
         </p>
         <div className="flex flex-col sm:flex-row justify-center items-center gap-4 max-w-lg mx-auto">
           <input
-            className="w-full px-6 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none transition-all"
+            className="w-full px-6 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-neutral-500 outline-none transition-all"
             placeholder="Enter your email"
             type="email"
           />

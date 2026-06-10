@@ -100,7 +100,7 @@ export default function AdminCustomersHome() {
     <div className="flex h-full min-h-0 w-full overflow-hidden bg-mgmt-surface-container-lowest">
       {/* Desktop: fixed full-height customer list column */}
       <div
-        className="hidden overflow-hidden border-r border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest lg:fixed lg:left-64 lg:top-0 lg:z-40 lg:flex lg:h-full lg:w-80 lg:flex-col"
+        className="hidden overflow-hidden border-r border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest lg:fixed lg:left-64 lg:top-0 lg:z-40 lg:flex lg:h-full lg:w-96 lg:flex-col"
         data-purpose="customers-list-fixed"
       >
       <section className="flex min-h-0 flex-1 flex-col bg-mgmt-surface-container-lowest">
@@ -177,7 +177,7 @@ export default function AdminCustomersHome() {
         </div>
       </section>
       </div>
-      <div className="hidden w-80 shrink-0 lg:block" aria-hidden />
+      <div className="hidden w-96 shrink-0 lg:block" aria-hidden />
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-mgmt-surface-container-lowest">
         {/* Mobile: customer selector + search */}

@@ -298,7 +298,7 @@ export default function AdminServicesHome() {
               key={service.id}
               className={
                 service.highlighted
-                  ? "group flex items-center rounded-lg border-l-4 border-l-mgmt-primary-container bg-mgmt-surface-container-lowest p-4 transition-all hover:shadow-sm"
+                  ? "group flex items-center rounded-lg border-l-4 border-l-mgmt-primary bg-mgmt-surface-container-lowest p-4 transition-all hover:shadow-sm"
                   : "group flex items-center rounded-lg bg-mgmt-surface-container-lowest p-4 transition-all hover:shadow-sm"
               }
             >
