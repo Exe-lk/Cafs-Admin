@@ -22,7 +22,7 @@ export default function ServicesSubNav() {
       data-purpose="secondary-navigation"
     >
       <div className="p-6">
-        <h2 className="text-xl font-bold text-mgmt-on-surface">Services &amp; classes</h2>
+        <h2 className="text-xl font-bold text-mgmt-on-surface">Services</h2>
       </div>
       <div className="flex-1 px-4 pb-6">
         <div className="mb-4">
@@ -43,7 +43,7 @@ export default function ServicesSubNav() {
                   : "text-mgmt-on-surface",
               )}
             >
-              <span>Services (3)</span>
+              <span>All services (3)</span>
               {onClasses && (
                 <svg
                   className="h-4 w-4 shrink-0"
@@ -105,7 +105,7 @@ export default function ServicesSubNav() {
                     d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                   />
                 </svg>
-                New service category
+                New service
               </button>
             </div>
           )}

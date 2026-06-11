@@ -118,7 +118,7 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 bg-mgmt-surface">
+    <div className="flex h-full min-h-0 flex-1 bg-mgmt-surface-container-lowest">
       {/* Desktop: fixed full-viewport column so the strip stays solid white (same pattern as settings sub-nav) */}
       <div
         className="hidden overflow-hidden border-r border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest lg:fixed lg:left-64 lg:top-0 lg:z-40 lg:flex lg:h-dvh lg:w-72 lg:flex-col"
@@ -135,7 +135,7 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
       </div>
       <div className="hidden w-72 shrink-0 lg:block" aria-hidden />
 
-      <section className="flex min-w-0 flex-1 flex-col bg-mgmt-surface">
+      <section className="flex min-w-0 flex-1 flex-col bg-mgmt-surface-container-lowest">
         {/* Mobile: therapist selector */}
         <div className="sticky top-1 z-40 border-b border-mgmt-outline-variant/10 bg-white/80 px-4 py-2 backdrop-blur-xl lg:hidden">
           <div className="flex items-center gap-3">
@@ -239,7 +239,7 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
             </div>
           }
         />
-        <div className="min-h-0 flex-1 overflow-y-auto bg-mgmt-surface">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-mgmt-surface-container-lowest">
           {loading ? (
             <div className="px-10 py-12 text-sm text-mgmt-on-surface-variant">Loading…</div>
           ) : errorMsg ? (

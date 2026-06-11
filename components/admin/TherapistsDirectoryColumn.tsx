@@ -47,17 +47,17 @@ export default function TherapistsDirectoryColumn({
     <aside className="flex h-full min-h-0 w-full flex-col bg-mgmt-surface-container-lowest">
       <div className="sticky top-0 z-40 shrink-0 border-b border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest px-5 py-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-            Therapists
+          <h2 className="text-sm font-bold  tracking-widest text-mgmt-on-surface-variant">
+            Team
           </h2>
-          <button
+          {/* <button
             type="button"
             className="flex items-center gap-2 rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-xs font-semibold text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container"
             onClick={onAdd}
           >
             <MaterialSymbol name="person_add" className="text-[18px]" />
             Add
-          </button>
+          </button> */}
         </div>
 
         <div className="mt-3 flex items-center gap-2 rounded-xl bg-mgmt-surface-container-low px-3 py-2">
@@ -108,7 +108,7 @@ export default function TherapistsDirectoryColumn({
                       : "hover:bg-mgmt-surface-container-low",
                   ].join(" ")}
                 >
-                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-mgmt-primary-container text-sm font-bold text-mgmt-on-primary-container">
+                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#E7E7E7] text-sm font-bold text-[#5F5F5F]">
                     {initials(t.name)}
                   </div>
                   <div className="min-w-0 flex-1">

@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import TherapistsDirectoryColumn from "@/components/admin/TherapistsDirectoryColumn";
 import AdminCalendarHome from "@/components/admin/AdminCalendarHome";
+import CreateTherapistModal from "@/components/admin/CreateTherapistModal";
 import { type AdminTherapistListItem, useAdminTherapists } from "@/components/admin/useAdminTherapists";
 
 export default function TheraphistHomePage() {
-  const { therapists, loading } = useAdminTherapists();
+  const { therapists, loading, refetch } = useAdminTherapists();
   const [selectedId, setSelectedId] = useState<string>("");
+  const [createTherapistOpen, setCreateTherapistOpen] = useState(false);
 
   const selected = useMemo<AdminTherapistListItem | undefined>(() => {
     return therapists.find((t) => t.id === selectedId) ?? therapists[0];
@@ -20,7 +22,7 @@ export default function TheraphistHomePage() {
   }, [selectedId, therapists]);
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
       {/* Mobile: therapist selector */}
       <div className="sticky top-0 z-40 border-b border-mgmt-outline-variant/10 bg-white/80 px-4 py-3 backdrop-blur-xl lg:hidden">
         <div className="flex flex-col gap-2">
@@ -54,16 +56,69 @@ export default function TheraphistHomePage() {
           therapists={therapists}
           selectedId={selectedId}
           onSelect={(t) => setSelectedId(t.id)}
+          onAdd={() => setCreateTherapistOpen(true)}
         />
       </div>
       <div className="hidden w-72 shrink-0 lg:block" aria-hidden />
 
-      <div className="min-w-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <AdminCalendarHome
           therapistId={selected?.id}
           therapistTimezone={selected?.timezone}
+          onAddTherapist={() => setCreateTherapistOpen(true)}
         />
       </div>
+
+      {createTherapistOpen ? (
+        <CreateTherapistModal
+          onClose={() => setCreateTherapistOpen(false)}
+          onCreate={async (draft) => {
+            const phone = [draft.phoneCountry.trim(), draft.phoneNumber.trim()].filter(Boolean).join(" ");
+
+            const userRes = await fetch("/api/v1/admin/users", {
+              method: "POST",
+              cache: "no-store",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                fullName: draft.fullName,
+                email: draft.email,
+                phone: phone || undefined,
+                role: "therapist",
+                isActive: !draft.hidden,
+              }),
+            });
+            const userJson = (await userRes.json()) as {
+              status?: string;
+              message?: string;
+              data?: { userId?: string };
+            };
+            if (!userRes.ok || userJson?.status !== "success") {
+              throw new Error(userJson?.message || `Failed to create user (HTTP ${userRes.status})`);
+            }
+            const userId = String(userJson?.data?.userId ?? "");
+            if (!userId) throw new Error("Create user succeeded but no userId returned");
+
+            const tRes = await fetch("/api/v1/admin/therapists", {
+              method: "POST",
+              cache: "no-store",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                userId,
+                visibility: draft.hidden ? "private" : "public",
+                bio: draft.aboutYou || undefined,
+                specialties: draft.specialization ? [draft.specialization] : [],
+              }),
+            });
+            const tJson = (await tRes.json()) as { status?: string; message?: string };
+            if (!tRes.ok || tJson?.status !== "success") {
+              throw new Error(tJson?.message || `Failed to create therapist (HTTP ${tRes.status})`);
+            }
+
+            refetch();
+            setSelectedId(userId);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

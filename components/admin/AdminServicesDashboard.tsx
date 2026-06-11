@@ -132,7 +132,7 @@ export default function AdminServicesDashboard() {
       ) : null}
 
       <header className="sticky top-12 z-10 flex items-center justify-between bg-mgmt-surface-container-lowest px-4 py-5 sm:top-0 sm:px-6 lg:px-8 lg:py-6">
-        <h1 className="text-2xl font-bold text-mgmt-on-surface">Services</h1>
+        <h1 className="text-2xl font-bold text-mgmt-on-surface">Service types</h1>
         <div className="flex items-center gap-4">
           <button
             type="button"
@@ -183,7 +183,7 @@ export default function AdminServicesDashboard() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="block w-full rounded-lg border border-mgmt-outline-variant bg-mgmt-surface-container-low py-2 pl-10 pr-3 text-sm text-mgmt-on-surface placeholder:text-mgmt-on-surface-variant focus:border-mgmt-primary focus:ring-2 focus:ring-mgmt-primary-container focus:outline-none"
-              placeholder="Services"
+              placeholder="Service types"
               type="search"
             />
           </div>

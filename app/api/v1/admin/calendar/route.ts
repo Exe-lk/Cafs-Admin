@@ -3,10 +3,10 @@ import { ok, err } from "@/lib/api/envelope";
 import { getAuthContext, requireRoleService } from "@/lib/api/auth";
 import { parseIsoDateParam } from "@/lib/api/http";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { resolveBankSlipProofUrl } from "@/lib/calendar/bankSlipProof";
+import { parseTimeBlockKindAndLabel } from "@/lib/calendar/timeBlocks";
+import { timeToHHMM, type WorkingHoursSlot } from "@/lib/calendar/workingHours";
 import { formatDbUtcTimestamp, normalizeTimeZone, parseDbUtcTimestamp } from "@/lib/timezone";
-
-const BANK_SLIPS_BUCKET = "bank-slips";
-const BANK_SLIP_SIGNED_URL_TTL_SECONDS = 60 * 10;
 
 type AppointmentRow = {
   appointment_id: string;
@@ -26,77 +26,6 @@ type AppointmentRow = {
       }>
     | null;
 };
-
-function normalizeStoragePath(path: string) {
-  const trimmed = path.trim().replace(/^\/+/, "");
-  if (!trimmed) return null;
-  if (trimmed.startsWith(`${BANK_SLIPS_BUCKET}/`)) {
-    return trimmed.slice(BANK_SLIPS_BUCKET.length + 1);
-  }
-  return trimmed;
-}
-
-function parseProviderPayload(payload: string | null | undefined): Record<string, unknown> | null {
-  if (!payload) return null;
-  try {
-    const parsed = JSON.parse(payload) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-function pickFirstString(payload: Record<string, unknown>, keys: string[]): string | null {
-  for (const key of keys) {
-    const value = payload[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return null;
-}
-
-async function resolveBankSlipProofUrl(
-  adminSupabase: ReturnType<typeof createSupabaseServiceRoleClient>,
-  row: AppointmentRow,
-) {
-  const payment = Array.isArray(row.payments) ? row.payments[0] : row.payments;
-  if (!payment || payment.method !== "bank_transfer") return null;
-
-  const payload = parseProviderPayload(payment.provider_payload);
-  if (!payload) return null;
-
-  const directUrl = pickFirstString(payload, [
-    "proofUrl",
-    "bankSlipUrl",
-    "slipUrl",
-    "publicUrl",
-    "url",
-  ]);
-  if (directUrl) return directUrl;
-
-  const path = pickFirstString(payload, [
-    "proofPath",
-    "bankSlipPath",
-    "storagePath",
-    "path",
-    "objectPath",
-    "filePath",
-    "key",
-  ]);
-  if (!path) return null;
-
-  const normalizedPath = normalizeStoragePath(path);
-  if (!normalizedPath) return null;
-
-  const { data, error } = await adminSupabase.storage
-    .from(BANK_SLIPS_BUCKET)
-    .createSignedUrl(normalizedPath, BANK_SLIP_SIGNED_URL_TTL_SECONDS);
-
-  if (error || !data?.signedUrl) return null;
-  return data.signedUrl;
-}
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthContext(request);
@@ -149,6 +78,15 @@ export async function GET(request: NextRequest) {
   );
 
   let therapistTimezone: string | undefined;
+  let timeBlocks: Array<{
+    timeBlockId: string;
+    startAt: string;
+    endAt: string;
+    kind: "time_off" | "break";
+    label: string;
+  }> = [];
+  let workingHours: WorkingHoursSlot[] = [];
+
   if (therapistId) {
     const { data: tzRow } = await adminSupabase
       .from("therapists")
@@ -158,12 +96,70 @@ export async function GET(request: NextRequest) {
     therapistTimezone = normalizeTimeZone(
       String((tzRow as { timezone?: unknown } | null)?.timezone ?? ""),
     );
+
+    if (fromD && toD) {
+      const blockQ = adminSupabase
+        .from("therapist_time_blocks")
+        .select("time_block_id,start_at,end_at,reason")
+        .eq("therapist_id", therapistId)
+        .gt("end_at", fromD.toISOString())
+        .lt("start_at", toD.toISOString())
+        .or("reason.like.time-off:%,reason.like.break:%")
+        .order("start_at", { ascending: true });
+
+      const { data: blockRows, error: blockErr } = await blockQ;
+      if (blockErr) return err(blockErr.message, 400);
+
+      timeBlocks = (blockRows ?? [])
+        .map((row) => {
+          const b = (row && typeof row === "object" ? (row as Record<string, unknown>) : {}) as Record<
+            string,
+            unknown
+          >;
+          const reason = b.reason === null ? null : String(b.reason);
+          const parsed = parseTimeBlockKindAndLabel(reason);
+          if (!parsed) return null;
+          const startUtc = parseDbUtcTimestamp(String(b.start_at));
+          const endUtc = parseDbUtcTimestamp(String(b.end_at));
+          if (!startUtc || !endUtc) return null;
+          return {
+            timeBlockId: String(b.time_block_id),
+            startAt: formatDbUtcTimestamp(startUtc),
+            endAt: formatDbUtcTimestamp(endUtc),
+            kind: parsed.kind,
+            label: parsed.label,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+    }
+
+    const { data: whRows, error: whErr } = await adminSupabase
+      .from("therapist_working_hours")
+      .select("day_of_week,start_time,end_time,is_active")
+      .eq("therapist_id", therapistId)
+      .order("day_of_week", { ascending: true });
+    if (whErr) return err(whErr.message, 400);
+
+    workingHours = (whRows ?? []).map((row) => {
+      const r = (row && typeof row === "object" ? (row as Record<string, unknown>) : {}) as Record<
+        string,
+        unknown
+      >;
+      return {
+        dayOfWeek: Number(r.day_of_week),
+        startTime: timeToHHMM(String(r.start_time ?? "00:00:00")),
+        endTime: timeToHHMM(String(r.end_time ?? "00:00:00")),
+        isActive: Boolean(r.is_active),
+      };
+    });
   }
 
   const res = ok(
     {
       items,
       therapistTimezone,
+      timeBlocks,
+      workingHours,
     },
     "Team calendar retrieved successfully",
   );

@@ -153,7 +153,7 @@ export default function AdminSettingsBookingPreferencesPage() {
           <h1 className="text-2xl font-bold tracking-tight text-mgmt-on-surface">Booking preferences</h1>
           <button
             type="button"
-            className="shrink-0 rounded-xl bg-black px-8 py-2.5 text-sm font-bold text-white transition-transform hover:opacity-90 active:scale-[0.98]"
+            className="shrink-0 rounded-xl bg-mgmt-primary px-4 py-2 text-sm font-semibold text-mgmt-on-primary transition-opacity hover:opacity-90"
           >
             Save
           </button>

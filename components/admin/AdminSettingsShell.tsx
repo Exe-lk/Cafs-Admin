@@ -30,7 +30,7 @@ export default function AdminSettingsShell({ children }: { children: ReactNode }
     <div className="flex h-full min-h-0 flex-1">
       {/* Desktop: fixed column so it never moves when the main pane (or window) scrolls */}
       <div
-        className="hidden overflow-y-auto border-r border-mgmt-outline-variant bg-mgmt-surface-container-lowest md:fixed md:left-64 md:top-0 md:z-40 md:flex md:h-dvh md:w-72 md:flex-col"
+        className="hidden overflow-y-auto bg-mgmt-surface-container-lowest md:fixed md:left-64 md:top-0 md:z-40 md:flex md:h-dvh md:w-72 md:flex-col"
         data-purpose="settings-subnav-fixed"
       >
         <AdminSettingsSubNav />
@@ -97,7 +97,7 @@ export default function AdminSettingsShell({ children }: { children: ReactNode }
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-hidden bg-mgmt-surface-container-lowest">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-mgmt-surface-container-lowest">{children}</div>
       </div>
     </div>
   );
