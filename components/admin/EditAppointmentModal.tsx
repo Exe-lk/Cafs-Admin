@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState } from "react";
+import AppointmentHistoryPanel from "@/components/admin/AppointmentHistoryPanel";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import {
   isAppointmentStartInPast,
@@ -48,6 +49,8 @@ export type AdminEditableAppointment = {
 
 const MIN_REJECT_REASON_LEN = 3;
 
+type TabKey = "details" | "history";
+
 export default function EditAppointmentModal({
   appointment,
   therapistTimezone,
@@ -81,6 +84,8 @@ export default function EditAppointmentModal({
   const [rejectReason, setRejectReason] = useState("");
   const [rejectSubmitting, setRejectSubmitting] = useState(false);
   const [rejectError, setRejectError] = useState<string | null>(null);
+  const [tab, setTab] = useState<TabKey>("details");
+  const [historyReloadKey, setHistoryReloadKey] = useState(0);
 
   const isApiBacked = Boolean(appointment.startAt && appointment.endAt);
   const busy = submitting || rejectSubmitting;
@@ -120,6 +125,8 @@ export default function EditAppointmentModal({
     setRejectReason("");
     setRejectSubmitting(false);
     setRejectError(null);
+    setTab("details");
+    setHistoryReloadKey(0);
   }, [appointment]);
 
   const canConfirmReject =
@@ -154,6 +161,7 @@ export default function EditAppointmentModal({
         const emailSent = Boolean(json.data?.emailSent);
         const emailError =
           typeof json.data?.emailError === "string" ? json.data.emailError : undefined;
+        setHistoryReloadKey((k) => k + 1);
         onRejected?.({
           dayId: appointment.dayId,
           sessionId: appointment.sessionId,
@@ -203,6 +211,25 @@ export default function EditAppointmentModal({
     draft.appointmentStatus === "pending_payment" ||
     draft.appointmentStatus === "pending_confirmation";
 
+  const tabBtn = (key: TabKey, label: string) => {
+    const active = tab === key;
+    return (
+      <button
+        key={key}
+        type="button"
+        onClick={() => setTab(key)}
+        className={cx(
+          "px-3 py-2.5 text-sm",
+          active
+            ? "font-semibold text-mgmt-primary border-b-2 border-mgmt-primary"
+            : "font-medium text-mgmt-on-surface-variant hover:text-mgmt-on-surface",
+        )}
+      >
+        {label}
+      </button>
+    );
+  };
+
   return (
     <div className="fixed inset-0 z-[100] overflow-y-auto bg-mgmt-inverse-surface/10 backdrop-blur-[2px]">
       <button
@@ -234,12 +261,26 @@ export default function EditAppointmentModal({
             </button>
           </div>
 
+          <div className="flex border-b border-mgmt-surface-container-low px-6">
+            {tabBtn("details", "Details")}
+            {tabBtn("history", "History")}
+          </div>
+
           <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-6">
-            {errorMsg ? (
+            {tab === "history" ? (
+              <AppointmentHistoryPanel
+                appointmentId={appointment.sessionId}
+                enabled={isApiBacked}
+                reloadKey={historyReloadKey}
+              />
+            ) : null}
+            {tab === "details" && errorMsg ? (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {errorMsg}
               </div>
             ) : null}
+            {tab === "details" ? (
+            <>
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-mgmt-surface-container-low px-4 py-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold text-mgmt-on-surface-variant">Approval status</p>
@@ -458,9 +499,23 @@ export default function EditAppointmentModal({
                 </div>
               ) : null}
             </div>
+            </>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-mgmt-surface-container-low p-4">
+            {tab === "history" ? (
+              <div className="flex w-full justify-end">
+                <button
+                  type="button"
+                  className="rounded-xl bg-mgmt-primary px-4 py-2.5 text-sm font-semibold text-mgmt-on-primary transition-opacity hover:opacity-90"
+                  onClick={onClose}
+                >
+                  Close
+                </button>
+              </div>
+            ) : (
+            <>
             <button
               type="button"
               className={cx(
@@ -565,6 +620,8 @@ export default function EditAppointmentModal({
                 Save
               </button>
             </div>
+            </>
+            )}
           </div>
         </div>
       </div>

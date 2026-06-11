@@ -11,6 +11,9 @@ import EditAppointmentModal, { type AdminEditableAppointment } from "@/component
 import EditTherapistClassModal from "@/components/admin/EditTherapistClassModal";
 import EditTherapistServiceModal from "@/components/admin/EditTherapistServiceModal";
 import {
+  approvalStatusForAppointmentStatus,
+} from "@/lib/calendar/appointmentStatus";
+import {
   isAppointmentStartInPast,
   PAST_APPOINTMENT_MESSAGE,
 } from "@/lib/calendar/scheduling";
@@ -176,15 +179,6 @@ function titleForAppointmentType(t: string | null) {
   if (t === "in_person") return "In-person appointment";
   if (t === "online") return "Online appointment";
   return "Appointment";
-}
-
-function approvalStatusForAppointmentStatus(
-  status: string,
-): "pending" | "accepted" | "rejected" {
-  if (status === "pending_payment" || status === "pending_confirmation") return "pending";
-  if (status === "confirmed" || status === "completed") return "accepted";
-  if (status === "cancelled" || status === "no_show" || status === "expired") return "rejected";
-  return "pending";
 }
 
 function pad2(n: number) {

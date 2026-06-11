@@ -11,6 +11,60 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
+type NavIcon =
+  | "calendar_today"
+  | "bookmarks"
+  | "medical_services"
+  | "group"
+  | "stethoscope"
+  | "settings"
+  | "event_note";
+
+type NavChild = {
+  href: string;
+  label: string;
+  icon: NavIcon;
+};
+
+type NavEntry =
+  | {
+      kind: "group";
+      href: string;
+      label: string;
+      icon: NavIcon;
+      children: NavChild[];
+    }
+  | {
+      kind: "link";
+      href: string;
+      label: string;
+      icon: NavIcon;
+    };
+
+const NAV_ENTRIES: NavEntry[] = [
+  {
+    kind: "group",
+    href: "/admin",
+    label: "Calendar",
+    icon: "calendar_today",
+    children: [{ href: "/admin/appointments", label: "Appointments", icon: "event_note" }],
+  },
+  { kind: "link", href: "/admin/service-types", label: "Service Categories", icon: "bookmarks" },
+  { kind: "link", href: "/admin/services", label: "Services", icon: "medical_services" },
+  { kind: "link", href: "/admin/customers", label: "Customers", icon: "group" },
+  { kind: "link", href: "/admin/theraphist", label: "Theraphist", icon: "stethoscope" },
+  { kind: "link", href: "/admin/settings", label: "Settings", icon: "settings" },
+];
+
+function linkClass(active: boolean) {
+  return cx(
+    "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 ease-in-out",
+    active
+      ? "scale-95 border-l-4 border-emerald-700 bg-emerald-50 font-semibold text-slate-900"
+      : "border-l-4 border-transparent text-slate-700 hover:bg-slate-50 hover:text-slate-900",
+  );
+}
+
 export default function AdminSidebar({
   className,
   onNavigate,
@@ -22,16 +76,6 @@ export default function AdminSidebar({
 }) {
   const pathname = usePathname();
   const { displayName, initials, loading: profileLoading } = useAdminProfile();
-
-  const items = [
-    { href: "/admin", label: "Calendar", icon: "calendar_today" as const },
-    { href: "/admin/service-types", label: "Service Categories", icon: "bookmarks" as const },
-    { href: "/admin/services", label: "Services", icon: "medical_services" as const },
-    // { href: "/admin/connect", label: "Connect", icon: "hub" as const },
-    { href: "/admin/customers", label: "Customers", icon: "group" as const },
-    { href: "/admin/theraphist", label: "Theraphist", icon: "stethoscope" as const },
-    { href: "/admin/settings", label: "Settings", icon: "settings" as const },
-  ];
 
   return (
     <aside
@@ -64,24 +108,62 @@ export default function AdminSidebar({
       </div>
 
       <nav className="flex min-h-0 flex-1 flex-col space-y-1 overflow-y-auto">
-        {items.map((item) => {
-          const active =
-            pathname === item.href || (item.href !== "/admin" && pathname?.startsWith(`${item.href}/`));
+        {NAV_ENTRIES.map((entry) => {
+          if (entry.kind === "link") {
+            const active =
+              pathname === entry.href ||
+              (entry.href !== "/admin" && pathname?.startsWith(`${entry.href}/`));
+            return (
+              <Link
+                key={entry.href}
+                href={entry.href}
+                onClick={() => onNavigate?.()}
+                className={linkClass(Boolean(active))}
+              >
+                <MaterialSymbol name={entry.icon} className="text-[22px]" />
+                <span className="text-[0.75rem] font-medium tracking-[0.05em]">{entry.label}</span>
+              </Link>
+            );
+          }
+
+          const calendarActive = pathname === entry.href;
+
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => onNavigate?.()}
-              className={cx(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 ease-in-out",
-                active
-                  ? "scale-95 border-l-4 border-emerald-700 bg-emerald-50 font-semibold text-slate-900"
-                  : "border-l-4 border-transparent text-slate-700 hover:bg-slate-50 hover:text-slate-900",
-              )}
-            >
-              <MaterialSymbol name={item.icon} className="text-[22px]" />
-              <span className="text-[0.75rem] font-medium tracking-[0.05em]">{item.label}</span>
-            </Link>
+            <div key={entry.href} className="space-y-0.5">
+              <Link
+                href={entry.href}
+                onClick={() => onNavigate?.()}
+                className={linkClass(calendarActive)}
+              >
+                <MaterialSymbol name={entry.icon} className="text-[22px]" />
+                <span className="text-[0.75rem] font-medium tracking-[0.05em]">{entry.label}</span>
+              </Link>
+
+              <div className="ml-3 space-y-0.5 border-l border-slate-200 pl-2">
+                {entry.children.map((child) => {
+                  const childActive =
+                    pathname === child.href || pathname?.startsWith(`${child.href}/`);
+                  return (
+                    <Link
+                      key={child.href}
+                      href={child.href}
+                      onClick={() => onNavigate?.()}
+                      className={cx(
+                        "flex items-center gap-2.5 rounded-lg py-2 pr-3 pl-2 transition-all duration-150 ease-in-out",
+                        childActive
+                          ? "bg-emerald-50 font-semibold text-emerald-900"
+                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                      )}
+                    >
+                      <MaterialSymbol name={child.icon} className="text-[18px]" />
+                      <span className="text-[0.7rem] font-medium tracking-[0.04em]">
+                        {child.label}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
       </nav>
@@ -108,4 +190,3 @@ export default function AdminSidebar({
     </aside>
   );
 }
-
