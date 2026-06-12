@@ -936,7 +936,7 @@ export default function AdminCalendarHome({
           </div>
         </header>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-mgmt-surface">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
           {errorMsg ? (
             <div className="shrink-0 border-b border-mgmt-outline-variant/10 bg-red-50 px-6 py-3 text-sm text-red-700">
               {errorMsg}
@@ -966,9 +966,9 @@ export default function AdminCalendarHome({
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="shrink-0 overflow-x-auto border-b border-mgmt-outline-variant/10 bg-mgmt-surface">
+              <div className="shrink-0 overflow-x-auto border-b border-mgmt-outline-variant/25 bg-white">
                 <div className={`grid min-w-[800px] ${gridColsClass}`}>
-                  <div className="bg-mgmt-surface" />
+                  <div className="bg-white" />
                   {dayColumns.map((colDate) => {
                   const colYmd = {
                     year: colDate.getFullYear(),
@@ -982,7 +982,7 @@ export default function AdminCalendarHome({
                   const dow = formatDateInTimeZone(colDate, timeZone, { weekday: "short" });
                   const dom = colDate.getDate();
                   return (
-                    <div key={colDate.toISOString()} className="bg-mgmt-surface py-4 text-center">
+                    <div key={colDate.toISOString()} className="bg-white py-4 text-center">
                       <span
                         className={`block text-xs font-bold uppercase tracking-widest ${
                           isToday ? "text-mgmt-primary" : "text-mgmt-on-surface-variant"
@@ -1094,7 +1094,7 @@ function TimeRow({
 }) {
   return (
     <>
-      <div className="border-b border-r border-mgmt-outline-variant/5 bg-mgmt-surface py-4 pr-4 text-right text-[0.65rem] font-bold uppercase tracking-tighter text-mgmt-on-surface-variant">
+      <div className="border-b border-r border-mgmt-outline-variant/25 bg-white py-4 pr-4 text-right text-[0.65rem] font-bold uppercase tracking-tighter text-mgmt-on-surface-variant">
         {timeLabel}
       </div>
       {dayColumns.map((colDate) => {
@@ -1152,11 +1152,12 @@ function TimeRow({
                 handleSlotActivate();
               }
             }}
-            className={`group relative min-h-[80px] border-b border-r border-mgmt-outline-variant/5 bg-white last:border-r-0 text-left ${
+            className={`group relative min-h-[80px] border-b border-r border-mgmt-outline-variant/5 bg-white last:border-r-0 text-left hover:bg-mgmt-surface-container-low cursor-pointer${
               slotUnavailable
                 ? "cursor-not-allowed bg-mgmt-surface-container-low/40"
                 : "cursor-pointer hover:bg-mgmt-surface-container-low"
             }`}
+            
             aria-label={`Create appointment ${colDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} at ${timeLabel}`}
             aria-disabled={slotUnavailable}
           >
@@ -1220,11 +1221,11 @@ function EventBlock({ ev, onClick }: { ev: CalEvent; onClick: () => void }) {
           e.stopPropagation();
           onClick();
         }}
-        className="absolute inset-x-1 top-1 bottom-1 z-10 cursor-pointer overflow-hidden rounded-xl border-l-4 border-mgmt-primary bg-mgmt-tertiary-container p-2 text-left shadow-sm hover:brightness-[0.98] active:scale-[0.995] transition"
+        className="absolute inset-x-1 top-1 bottom-1 z-10 cursor-pointer overflow-hidden rounded-xl border-l-4 border-[#2d6a4f] bg-[#cbede1] p-2 text-left shadow-sm hover:brightness-[0.98] active:scale-[0.995] transition"
         aria-label={`Edit appointment: ${ev.title}`}
       >
-        <p className="text-[0.65rem] font-bold leading-tight text-mgmt-on-primary-container">{ev.title}</p>
-        <p className="text-[0.6rem] text-mgmt-on-primary-container/80">{ev.subtitle}</p>
+        <p className="text-[0.65rem] font-bold leading-tight text-[#1d5c42]">{ev.title}</p>
+        <p className="text-[0.6rem] text-[#1d5c42]/80">{ev.subtitle}</p>
       </button>
     );
   }

@@ -16,9 +16,8 @@ const BRAND_SWATCHES = [
   "#2563eb",
   "#c4a574",
   "#6b7280",
-  "#0d9488",
-  "#16a34a",
   "#171717",
+  "#000000",
 ] as const;
 
 const INDUSTRY_OPTIONS = [

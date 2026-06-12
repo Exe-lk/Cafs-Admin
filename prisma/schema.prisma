@@ -159,14 +159,16 @@ model Therapist {
 
 /// `client_id` matches `profiles.user_id` for client users.
 model ClientProfile {
-  clientId              String    @id @map("client_id") @db.Uuid
-  dateOfBirth           DateTime? @map("date_of_birth") @db.Date
-  gender                String?
-  address               String?
-  emergencyContactName  String?   @map("emergency_contact_name")
-  emergencyContactPhone String?   @map("emergency_contact_phone")
-  createdAt             DateTime  @map("created_at")
-  updatedAt             DateTime  @map("updated_at")
+  clientId                      String    @id @map("client_id") @db.Uuid
+  dateOfBirth                   DateTime? @map("date_of_birth") @db.Date
+  gender                        String?
+  address                       String?
+  emergencyContactName          String?   @map("emergency_contact_name")
+  emergencyContactPhone         String?   @map("emergency_contact_phone")
+  /// Client Information Sheet (`/client-information`) responses stored as JSON.
+  clientInformationSheetJson    Json?     @map("client_information_sheet_json")
+  createdAt                     DateTime  @map("created_at")
+  updatedAt                     DateTime  @map("updated_at")
 
   profile Profile @relation(fields: [clientId], references: [userId])
 

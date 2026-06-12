@@ -109,6 +109,7 @@ export async function GET(request: NextRequest) {
 
   const sp = request.nextUrl.searchParams;
   const statusParam = sp.get("status")?.trim() || null;
+  const clientId = sp.get("clientId")?.trim() || null;
   const qText = sp.get("q")?.trim() || null;
 
   if (
@@ -141,8 +142,20 @@ export async function GET(request: NextRequest) {
     )
     .order("start_at", { ascending: true });
 
+  if (clientId) {
+    q = q.eq("client_id", clientId);
+  }
+
   if (statusParam) {
     q = q.eq("status", statusParam);
+  } else if (clientId) {
+    q = q.in("status", [
+      ...LISTABLE_APPOINTMENT_STATUSES,
+      "completed",
+      "cancelled",
+      "no_show",
+      "expired",
+    ]);
   } else {
     q = q.in("status", [...LISTABLE_APPOINTMENT_STATUSES]);
   }

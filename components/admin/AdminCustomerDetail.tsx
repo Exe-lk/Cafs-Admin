@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import AdminCustomerFormDetailsTab from "@/components/admin/AdminCustomerFormDetailsTab";
+import CreateAppointmentModal from "@/components/admin/CreateAppointmentModal";
 import EditCustomerModal, { type AdminCustomerProfile } from "@/components/admin/EditCustomerModal";
 import EditAppointmentModal, {
   type AdminEditableAppointment,
@@ -66,7 +68,7 @@ function moneyUsd(v: number) {
   return v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
-type DetailTabId = "about" | "notes" | "appointments" | "updates";
+type DetailTabId = "about" | "form_details" | "notes" | "appointments" | "updates";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -104,6 +106,9 @@ export default function AdminCustomerDetail({
   onPersistProfile?: (args: { clientId: string; fullName: string; phone: string }) => Promise<void>;
 }) {
   const [editOpen, setEditOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [bookAppointmentOpen, setBookAppointmentOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<DetailTabId>("about");
   const [mobileTabOpen, setMobileTabOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
@@ -111,6 +116,9 @@ export default function AdminCustomerDetail({
     [],
   );
   const [editingAppt, setEditingAppt] = useState<AdminEditableAppointment | null>(null);
+  const [formSheet, setFormSheet] = useState<unknown>(null);
+  const [formSheetLoading, setFormSheetLoading] = useState(false);
+  const [formSheetError, setFormSheetError] = useState<string | null>(null);
 
   const profile: AdminCustomerProfile = useMemo(
     () => ({
@@ -134,6 +142,7 @@ export default function AdminCustomerDetail({
   const tabs: { id: DetailTabId; label: string }[] = useMemo(
     () => [
       { id: "about", label: "About" },
+      { id: "form_details", label: "Form details" },
       { id: "notes", label: "Notes" },
       { id: "appointments", label: "Appointments" },
       { id: "updates", label: "Updates" },
@@ -148,18 +157,66 @@ export default function AdminCustomerDetail({
     return parts.join(", ") || "—";
   }, [customer.cityStateLine, customer.country]);
 
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [moreMenuOpen]);
+
+  useEffect(() => {
+    if (tab !== "form_details" || !customer.id) return;
+
+    const ac = new AbortController();
+
+    void (async () => {
+      setFormSheetLoading(true);
+      setFormSheetError(null);
+      try {
+        const res = await fetch(`/api/v1/admin/clients/${customer.id}`, {
+          method: "GET",
+          cache: "no-store",
+          signal: ac.signal,
+        });
+        const json = (await res.json()) as {
+          status?: string;
+          message?: string;
+          data?: { clientInformationSheetJson?: unknown };
+        };
+        if (!res.ok || json?.status !== "success") {
+          throw new Error(json?.message || `Failed to load form details (HTTP ${res.status})`);
+        }
+        setFormSheet(json.data?.clientInformationSheetJson ?? null);
+      } catch (e) {
+        if ((e as { name?: string })?.name === "AbortError") return;
+        setFormSheet(null);
+        setFormSheetError(e instanceof Error ? e.message : "Failed to load form details");
+      } finally {
+        if (!ac.signal.aborted) setFormSheetLoading(false);
+      }
+    })();
+
+    return () => {
+      ac.abort();
+    };
+  }, [tab, customer.id]);
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto bg-mgmt-surface-container-lowest">
       <div className="flex min-h-0 flex-1 flex-col px-6 py-6 sm:px-8 sm:py-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="flex min-w-0 flex-1 items-start gap-4 sm:gap-6">
             {customer.avatarUrl ? (
-              <div className="h-24 w-24 shrink-0 overflow-hidden rounded-full bg-mgmt-primary">
+              <div className="h-24 w-24 shrink-0 overflow-hidden rounded-full bg-[#E7E7E7]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={customer.avatarUrl} alt="" className="h-full w-full object-cover" />
               </div>
             ) : (
-              <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-mgmt-primary text-4xl font-bold text-mgmt-on-primary">
+              <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-[#E7E7E7] text-4xl font-bold text-[#5F5F5F]">
                 {avatarInitial(customer.fullName)}
               </div>
             )}
@@ -184,19 +241,68 @@ export default function AdminCustomerDetail({
           <div className="flex shrink-0 items-center gap-2 md:self-start">
             <button
               type="button"
-              className="flex items-center gap-2 whitespace-nowrap rounded-xl bg-mgmt-primary px-4 py-2 text-sm font-semibold text-mgmt-on-primary transition-opacity hover:opacity-90"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container-low"
               onClick={() => setEditOpen(true)}
               aria-label="Edit profile"
             >
-              <MaterialSymbol name="edit" className="text-[18px]" />
-              Edit profile
+              <MaterialSymbol name="edit" className="text-[22px]" />
             </button>
-            <span
-              className="shrink-0 rounded-lg bg-mgmt-surface-container-low p-2.5 text-mgmt-on-surface-variant"
-              title="More"
+
+            <div className="relative" ref={moreMenuRef}>
+              <button
+                type="button"
+                onClick={() => setMoreMenuOpen((open) => !open)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container-low"
+                aria-label="More options"
+                aria-haspopup="menu"
+                aria-expanded={moreMenuOpen}
+              >
+                <MaterialSymbol name="more_vert" className="text-[22px]" />
+              </button>
+
+              {moreMenuOpen ? (
+                <div
+                  className="absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-xl border border-mgmt-outline-variant/20 bg-white py-1 shadow-lg"
+                  role="menu"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMoreMenuOpen(false);
+                      onUpdateCustomer({ ...customer, statusLabel: "Blocked" });
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-mgmt-on-surface hover:bg-mgmt-surface-container-low"
+                  >
+                    <MaterialSymbol name="block" className="text-[20px] text-mgmt-on-surface-variant" />
+                    Block customer
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMoreMenuOpen(false);
+                      const ok = window.confirm(
+                        `Delete customer "${customer.fullName}"? This cannot be undone.`,
+                      );
+                      if (ok) onDeleteCustomer?.(customer.id);
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 hover:bg-mgmt-surface-container-low"
+                  >
+                    <MaterialSymbol name="delete" className="text-[20px]" />
+                    Delete customer
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setBookAppointmentOpen(true)}
+              className="whitespace-nowrap rounded-full border border-mgmt-outline-variant bg-white px-5 py-2.5 text-sm font-semibold text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container-low"
             >
-              <MaterialSymbol name="more_horiz" />
-            </span>
+              Book appointment
+            </button>
           </div>
         </div>
 
@@ -363,6 +469,14 @@ export default function AdminCustomerDetail({
               </div>
             </div>
           </div>
+        )}
+
+        {tab === "form_details" && (
+          <AdminCustomerFormDetailsTab
+            sheet={formSheet}
+            loading={formSheetLoading}
+            error={formSheetError}
+          />
         )}
 
         {tab === "notes" && (
@@ -551,6 +665,11 @@ export default function AdminCustomerDetail({
           </div>
         )}
       </div>
+
+      <CreateAppointmentModal
+        open={bookAppointmentOpen}
+        onClose={() => setBookAppointmentOpen(false)}
+      />
 
       {editOpen ? (
         <EditCustomerModal
