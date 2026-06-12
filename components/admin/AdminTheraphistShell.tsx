@@ -168,12 +168,11 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="flex items-center gap-2 rounded-xl bg-mgmt-primary px-4 py-2 text-sm font-semibold text-mgmt-on-primary transition-opacity hover:opacity-90"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container-low"
                 onClick={() => setEditOpen(true)}
                 aria-label="Edit profile"
               >
-                <MaterialSymbol name="edit" className="text-[18px]" />
-                Edit profile
+                <MaterialSymbol name="edit" className="text-[22px]" />
               </button>
 
               <button

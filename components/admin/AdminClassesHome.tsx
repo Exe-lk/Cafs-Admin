@@ -178,7 +178,7 @@ export default function AdminClassesHome() {
         />
       ) : null}
 
-      <header className="sticky top-12 z-10 flex shrink-0 items-center justify-between gap-3 border-b border-mgmt-outline-variant bg-mgmt-surface-container-lowest px-4 py-5 sm:top-0 sm:px-6 lg:px-8 lg:py-6">
+      <header className="sticky top-12 z-10 flex shrink-0 items-center justify-between gap-3 bg-mgmt-surface-container-lowest px-4 py-5 sm:top-0 sm:px-6 lg:px-8 lg:py-6">
         <h1 className="min-w-0 truncate text-xl font-bold text-mgmt-on-surface sm:text-2xl">Classes</h1>
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <button
@@ -201,7 +201,7 @@ export default function AdminClassesHome() {
         </div>
       </header>
 
-      <div className="mt-12 px-4 py-5 sm:px-6 lg:px-8">
+      <div className="px-4 pb-5 sm:px-6 lg:px-8">
         {errorMsg ? (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {errorMsg}

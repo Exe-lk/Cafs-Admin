@@ -9,7 +9,7 @@ export default function Home() {
         <nav className="max-w-7xl mx-auto flex flex-nowrap items-center justify-between gap-2 sm:gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-8">
             <a href="#" className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
-              <div className="w-10 h-10 bg-primary-teal rounded-full flex items-center justify-center overflow-hidden shrink-0">
+              <div className="w-10 h-10 bg-cafs-black rounded-full flex items-center justify-center overflow-hidden shrink-0 border border-dark-border">
                 <Image
                   src="/cafs-logo.png"
                   alt="CAFS logo"
@@ -216,7 +216,7 @@ export default function Home() {
                     name="review"
                     rows={4}
                     placeholder="Write about your experience..."
-                    className="w-full bg-black/30 border border-dark-border rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+                    className="w-full bg-black/30 border border-dark-border rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-neutral-500 resize-none"
                     required
                   />
                 </div>
@@ -224,7 +224,7 @@ export default function Home() {
                 <div className="md:col-span-12 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-start pt-2">
                   <button
                     type="submit"
-                    className="px-6 py-2 rounded-full text-sm font-bold bg-teal-600 hover:bg-teal-500 text-white transition-colors"
+                    className="px-6 py-2 rounded-full text-sm font-bold bg-neutral-900 hover:bg-neutral-800 text-white transition-colors"
                   >
                     Submit review
                   </button>
@@ -238,7 +238,7 @@ export default function Home() {
           <div className="lg:sticky lg:top-24 space-y-4">
             <div className="bg-dark-card border border-dark-border rounded-2xl overflow-hidden">
               <div className="p-5 sm:p-8 text-center">
-                <div className="w-24 h-24 bg-primary-teal rounded-full flex items-center justify-center mx-auto mb-6 overflow-hidden">
+                <div className="w-24 h-24 bg-cafs-black rounded-full flex items-center justify-center mx-auto mb-6 overflow-hidden border border-dark-border">
                   <Image
                     src="/cafs-logo.png"
                     alt="CAFS logo"
@@ -251,7 +251,7 @@ export default function Home() {
                 </h2>
                 <button
                   type="button"
-                  className="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-3 rounded-lg transition-colors mb-6"
+                  className="w-full bg-neutral-900 hover:bg-neutral-800 text-white font-bold py-3 rounded-lg transition-colors mb-6"
                 >
                   Book
                 </button>
@@ -277,7 +277,7 @@ export default function Home() {
             </div>
             <Link
               href="/appointments"
-              className="flex w-full items-center justify-center bg-teal-600 hover:bg-[#2b2b2b] border border-dark-border text-white font-semibold py-3 rounded-xl transition-colors"
+              className="flex w-full items-center justify-center bg-neutral-900 hover:bg-[#2b2b2b] border border-dark-border text-white font-semibold py-3 rounded-xl transition-colors"
             >
               View all appointments
             </Link>

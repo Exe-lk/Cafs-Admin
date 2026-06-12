@@ -21,7 +21,7 @@ export default function ServiceTypesSubNav() {
       data-purpose="secondary-navigation"
     >
       <div className="p-6">
-        <h2 className="text-xl font-bold text-mgmt-on-surface">Service types</h2>
+        <h2 className="text-lg font-bold text-mgmt-on-surface">Service & Class types</h2>
       </div>
       <div className="flex-1 px-4 pb-6">
         <div className="mb-4">
@@ -42,7 +42,7 @@ export default function ServiceTypesSubNav() {
                   : "text-mgmt-on-surface",
               )}
             >
-              <span>Service types (3)</span>
+              <span>Service types (4)</span>
               {onClasses && (
                 <svg
                   className="h-4 w-4 shrink-0"
@@ -120,7 +120,7 @@ export default function ServiceTypesSubNav() {
                 : "text-mgmt-on-surface-variant hover:bg-mgmt-surface-container-low",
             )}
           >
-            <span>Classes (1)</span>
+            <span>Classes types(4)</span>
             <svg
               className="h-4 w-4 shrink-0"
               fill="none"

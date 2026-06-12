@@ -151,7 +151,7 @@ export default function AdminSidebar({
                       className={cx(
                         "flex items-center gap-2.5 rounded-lg py-2 pr-3 pl-2 transition-all duration-150 ease-in-out",
                         childActive
-                          ? "bg-emerald-50 font-semibold text-emerald-900"
+                          ? "bg-[#F1F1F1] font-semibold text-slate-900"
                           : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
                       )}
                     >
