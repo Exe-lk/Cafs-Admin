@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import AdminCustomerFormDetailsTab from "@/components/admin/AdminCustomerFormDetailsTab";
 import CreateAppointmentModal from "@/components/admin/CreateAppointmentModal";
 import EditCustomerModal, { type AdminCustomerProfile } from "@/components/admin/EditCustomerModal";
 import EditAppointmentModal, {
@@ -67,7 +68,7 @@ function moneyUsd(v: number) {
   return v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
-type DetailTabId = "about" | "notes" | "appointments" | "updates";
+type DetailTabId = "about" | "form_details" | "notes" | "appointments" | "updates";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -115,6 +116,9 @@ export default function AdminCustomerDetail({
     [],
   );
   const [editingAppt, setEditingAppt] = useState<AdminEditableAppointment | null>(null);
+  const [formSheet, setFormSheet] = useState<unknown>(null);
+  const [formSheetLoading, setFormSheetLoading] = useState(false);
+  const [formSheetError, setFormSheetError] = useState<string | null>(null);
 
   const profile: AdminCustomerProfile = useMemo(
     () => ({
@@ -138,6 +142,7 @@ export default function AdminCustomerDetail({
   const tabs: { id: DetailTabId; label: string }[] = useMemo(
     () => [
       { id: "about", label: "About" },
+      { id: "form_details", label: "Form details" },
       { id: "notes", label: "Notes" },
       { id: "appointments", label: "Appointments" },
       { id: "updates", label: "Updates" },
@@ -162,6 +167,43 @@ export default function AdminCustomerDetail({
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [moreMenuOpen]);
+
+  useEffect(() => {
+    if (tab !== "form_details" || !customer.id) return;
+
+    const ac = new AbortController();
+
+    void (async () => {
+      setFormSheetLoading(true);
+      setFormSheetError(null);
+      try {
+        const res = await fetch(`/api/v1/admin/clients/${customer.id}`, {
+          method: "GET",
+          cache: "no-store",
+          signal: ac.signal,
+        });
+        const json = (await res.json()) as {
+          status?: string;
+          message?: string;
+          data?: { clientInformationSheetJson?: unknown };
+        };
+        if (!res.ok || json?.status !== "success") {
+          throw new Error(json?.message || `Failed to load form details (HTTP ${res.status})`);
+        }
+        setFormSheet(json.data?.clientInformationSheetJson ?? null);
+      } catch (e) {
+        if ((e as { name?: string })?.name === "AbortError") return;
+        setFormSheet(null);
+        setFormSheetError(e instanceof Error ? e.message : "Failed to load form details");
+      } finally {
+        if (!ac.signal.aborted) setFormSheetLoading(false);
+      }
+    })();
+
+    return () => {
+      ac.abort();
+    };
+  }, [tab, customer.id]);
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto bg-mgmt-surface-container-lowest">
@@ -427,6 +469,14 @@ export default function AdminCustomerDetail({
               </div>
             </div>
           </div>
+        )}
+
+        {tab === "form_details" && (
+          <AdminCustomerFormDetailsTab
+            sheet={formSheet}
+            loading={formSheetLoading}
+            error={formSheetError}
+          />
         )}
 
         {tab === "notes" && (

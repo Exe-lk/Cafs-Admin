@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import AdminCustomerDetail, { type AdminCustomerModel } from "@/components/admin/AdminCustomerDetail";
 import CreateCustomerModal from "@/components/admin/CreateCustomerModal";
+import {
+  buildAdminAppointmentDays,
+  buildCustomerStatsFromAppointments,
+  lastActivityFromAppointments,
+  type ClientAppointmentListItem,
+} from "@/lib/admin/clientAppointments";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -95,6 +101,60 @@ export default function AdminCustomersHome() {
     const match = filtered.find((c) => c.id === selectedId);
     return match ?? filtered[0] ?? null;
   }, [filtered, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId || loading) return;
+
+    const ac = new AbortController();
+    const clientId = selectedId;
+
+    void (async () => {
+      try {
+        const sp = new URLSearchParams();
+        sp.set("clientId", clientId);
+        const res = await fetch(`/api/v1/admin/appointments/list?${sp.toString()}`, {
+          method: "GET",
+          cache: "no-store",
+          signal: ac.signal,
+        });
+        const json = (await res.json()) as {
+          status?: string;
+          message?: string;
+          data?: { items?: ClientAppointmentListItem[] };
+        };
+        if (!res.ok || json?.status !== "success") {
+          throw new Error(json?.message || `Failed to load appointments (HTTP ${res.status})`);
+        }
+
+        const items = json.data?.items ?? [];
+        setCustomers((prev) =>
+          prev.map((c) => {
+            if (c.id !== clientId) return c;
+            return {
+              ...c,
+              appointmentDays: buildAdminAppointmentDays(items, c.fullName),
+              stats: buildCustomerStatsFromAppointments(items),
+              lastActivity: lastActivityFromAppointments(items),
+            };
+          }),
+        );
+      } catch (e) {
+        if ((e as { name?: string })?.name === "AbortError") return;
+        setCustomers((prev) =>
+          prev.map((c) => {
+            if (c.id !== clientId) return c;
+            return {
+              ...c,
+              appointmentDays: [],
+              lastActivity: "Could not load appointments",
+            };
+          }),
+        );
+      }
+    })();
+
+    return () => ac.abort();
+  }, [selectedId, loading]);
 
   return (
     <div className="flex h-full min-h-0 w-full overflow-hidden bg-mgmt-surface-container-lowest">
