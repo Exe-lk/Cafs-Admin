@@ -615,10 +615,8 @@ export default function AdminCalendarHome({
       ) : null}
 
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-mgmt-surface-container-lowest">
-        <header className="z-40 grid h-16 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b border-mgmt-outline-variant/10 bg-white/80 px-8 backdrop-blur-xl">
-          <div aria-hidden />
-
-          <div className="flex items-center gap-4">
+        <header className="z-40 flex min-h-[4.5rem] shrink-0 items-center justify-between border-b border-mgmt-outline-variant/10 bg-white/80 px-8 py-4 backdrop-blur-xl">
+          <div className="ml-35 flex items-center gap-6">
             <div className="relative" ref={datePickerRef}>
               <button
                 type="button"
@@ -676,7 +674,7 @@ export default function AdminCalendarHome({
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 sm:gap-3">
+          <div className="flex items-center justify-end gap-3 sm:gap-4">
             <div className="relative" ref={viewMenuRef}>
               <button
                 type="button"
@@ -982,21 +980,28 @@ export default function AdminCalendarHome({
                   const dow = formatDateInTimeZone(colDate, timeZone, { weekday: "short" });
                   const dom = colDate.getDate();
                   return (
-                    <div key={colDate.toISOString()} className="bg-white py-4 text-center">
+                    <div
+                      key={colDate.toISOString()}
+                      className="flex items-center justify-center gap-2 bg-white py-4"
+                    >
                       <span
-                        className={`block text-xs font-bold uppercase tracking-widest ${
-                          isToday ? "text-mgmt-primary" : "text-mgmt-on-surface-variant"
-                        }`}
+                        className={
+                          isToday
+                            ? "flex h-9 min-w-9 items-center justify-center rounded-lg bg-mgmt-primary px-2 text-lg font-bold text-mgmt-on-primary"
+                            : "flex h-9 min-w-9 items-center justify-center px-2 text-xl font-bold text-mgmt-on-surface"
+                        }
+                      >
+                        {dom}
+                      </span>
+                      <span
+                        className={
+                          isToday
+                            ? "text-sm font-medium text-mgmt-on-surface"
+                            : "text-sm font-medium text-mgmt-on-surface-variant"
+                        }
                       >
                         {dow}
                       </span>
-                      {isToday ? (
-                        <div className="mx-auto mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-mgmt-primary text-2xl font-bold text-mgmt-on-primary">
-                          {dom}
-                        </div>
-                      ) : (
-                        <span className="mt-1 block text-2xl font-bold text-mgmt-on-surface">{dom}</span>
-                      )}
                     </div>
                   );
                   })}
@@ -1221,7 +1226,7 @@ function EventBlock({ ev, onClick }: { ev: CalEvent; onClick: () => void }) {
           e.stopPropagation();
           onClick();
         }}
-        className="absolute inset-x-1 top-1 bottom-1 z-10 cursor-pointer overflow-hidden rounded-xl border-l-4 border-[#2d6a4f] bg-[#cbede1] p-2 text-left shadow-sm hover:brightness-[0.98] active:scale-[0.995] transition"
+        className="absolute inset-x-1 top-1 bottom-1 z-10 cursor-pointer overflow-hidden border-l-4 border-[#2d6a4f] bg-[#cbede1] p-2 text-left shadow-sm hover:brightness-[0.98] active:scale-[0.995] transition"
         aria-label={`Edit appointment: ${ev.title}`}
       >
         <p className="text-[0.65rem] font-bold leading-tight text-[#1d5c42]">{ev.title}</p>
@@ -1237,7 +1242,7 @@ function EventBlock({ ev, onClick }: { ev: CalEvent; onClick: () => void }) {
         e.stopPropagation();
         onClick();
       }}
-      className="absolute inset-x-1 top-1 z-10 cursor-pointer overflow-hidden rounded-xl border-l-4 border-slate-400 bg-slate-100 p-2 text-left shadow-sm hover:bg-slate-200/70 active:scale-[0.995] transition"
+      className="absolute inset-x-1 top-1 z-10 cursor-pointer overflow-hidden border-l-4 border-slate-400 bg-slate-100 p-2 text-left shadow-sm hover:bg-slate-200/70 active:scale-[0.995] transition"
       style={{ height: `${h}px` }}
       aria-label={`Edit appointment: ${ev.title}`}
     >

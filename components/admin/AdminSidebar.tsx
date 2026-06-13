@@ -14,8 +14,8 @@ function cx(...classes: Array<string | false | null | undefined>) {
 type NavIcon =
   | "calendar_today"
   | "bookmarks"
-  | "medical_services"
-  | "group"
+  | "format_list_bulleted"
+  | "sentiment_satisfied"
   | "stethoscope"
   | "settings"
   | "event_note";
@@ -50,8 +50,8 @@ const NAV_ENTRIES: NavEntry[] = [
     children: [{ href: "/admin/appointments", label: "Appointments", icon: "event_note" }],
   },
   { kind: "link", href: "/admin/service-types", label: "Service Categories", icon: "bookmarks" },
-  { kind: "link", href: "/admin/services", label: "Services", icon: "medical_services" },
-  { kind: "link", href: "/admin/customers", label: "Customers", icon: "group" },
+  { kind: "link", href: "/admin/services", label: "Services", icon: "format_list_bulleted" },
+  { kind: "link", href: "/admin/customers", label: "Customers", icon: "sentiment_satisfied" },
   { kind: "link", href: "/admin/theraphist", label: "Theraphist", icon: "stethoscope" },
   { kind: "link", href: "/admin/settings", label: "Settings", icon: "settings" },
 ];
@@ -60,8 +60,8 @@ function linkClass(active: boolean) {
   return cx(
     "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 ease-in-out",
     active
-      ? "scale-95 border-l-4 border-emerald-700 bg-emerald-50 font-semibold text-slate-900"
-      : "border-l-4 border-transparent text-slate-700 hover:bg-slate-50 hover:text-slate-900",
+      ? "bg-[#F1F1F1] font-semibold text-slate-900"
+      : "text-slate-700 hover:bg-slate-50 hover:text-slate-900",
   );
 }
 

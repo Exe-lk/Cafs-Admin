@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import EditTherapistServiceModal, {
   type EditTherapistServiceModalItem,
 } from "@/components/admin/EditTherapistServiceModal";
+import ListItemActionsMenu from "@/components/admin/ListItemActionsMenu";
 
 type ServiceItem = EditTherapistServiceModalItem & {
   highlighted?: boolean;
@@ -73,6 +74,40 @@ function therapistBookingSlug(name: string) {
   return first.toLowerCase();
 }
 
+function therapistDisplayLabel(name: string) {
+  return `${name} (${therapistInitials(name)})`;
+}
+
+function cx(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
+
+function LetterAvatar({ label, className }: { label: string; className?: string }) {
+  return (
+    <span
+      className={cx(
+        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#E7E7E7] text-xs font-bold text-[#5F5F5F]",
+        className,
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function CafsTeamAvatar({ className }: { className?: string }) {
+  return (
+    <span
+      className={cx(
+        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0d9488] text-[0.55rem] font-bold tracking-tight text-white",
+        className,
+      )}
+    >
+      CAFS
+    </span>
+  );
+}
+
 function LinkIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -99,24 +134,17 @@ function ClockIcon({ className }: { className?: string }) {
   );
 }
 
-function MoreIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="currentColor" viewBox="0 0 20 20" aria-hidden>
-      <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-    </svg>
-  );
-}
-
-const therapistFilterClass =
-  "h-full min-w-0 flex-1 appearance-none border-none bg-transparent py-2 pl-2 pr-8 text-sm text-mgmt-on-surface outline-none";
-
 export default function AdminServicesHome() {
   const [therapistFilter, setTherapistFilter] = useState("");
+  const [therapistMenuOpen, setTherapistMenuOpen] = useState(false);
+  const therapistMenuRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pageLinkCopied, setPageLinkCopied] = useState(false);
   const [serviceModal, setServiceModal] = useState<ServiceModalState>("closed");
-  const services = PLACEHOLDER_SERVICES;
+  const [services, setServices] = useState<ServiceItem[]>(PLACEHOLDER_SERVICES);
+  const [actionsMenuId, setActionsMenuId] = useState<string | null>(null);
+  const [hiddenById, setHiddenById] = useState<Record<string, boolean>>({});
 
   const therapistOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -126,12 +154,23 @@ export default function AdminServicesHome() {
     return Array.from(map, ([id, name]) => ({ id, name }));
   }, [services]);
 
-  const activeTherapist = useMemo(() => {
-    if (therapistFilter) {
-      return therapistOptions.find((t) => t.id === therapistFilter) ?? therapistOptions[0];
+  const selectedTherapist = useMemo(
+    () => therapistOptions.find((t) => t.id === therapistFilter) ?? null,
+    [therapistFilter, therapistOptions],
+  );
+
+  const activeTherapist = selectedTherapist ?? therapistOptions[0];
+
+  useEffect(() => {
+    if (!therapistMenuOpen) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (therapistMenuRef.current && !therapistMenuRef.current.contains(e.target as Node)) {
+        setTherapistMenuOpen(false);
+      }
     }
-    return therapistOptions[0];
-  }, [therapistFilter, therapistOptions]);
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [therapistMenuOpen]);
 
   const bookingPagePath = useMemo(() => {
     const slug = activeTherapist ? therapistBookingSlug(activeTherapist.name) : "book";
@@ -221,29 +260,90 @@ export default function AdminServicesHome() {
           className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4"
           data-purpose="filters"
         >
-          <div className="relative flex h-10 min-w-0 items-center rounded-lg border border-mgmt-outline-variant bg-mgmt-surface-container-low sm:min-w-[220px] sm:max-w-[260px]">
-            <span className="pointer-events-none flex shrink-0 items-center pl-3">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#E7E7E7] text-xs font-bold text-[#5F5F5F]">
-                {therapistInitials(activeTherapist?.name ?? "Therapist")}
-              </span>
-            </span>
-            <select
-              value={therapistFilter}
-              onChange={(e) => setTherapistFilter(e.target.value)}
-              className={therapistFilterClass}
+          <div className="relative min-w-0 sm:min-w-[240px] sm:max-w-[320px]" ref={therapistMenuRef}>
+            <button
+              type="button"
+              onClick={() => setTherapistMenuOpen((open) => !open)}
+              className="flex h-10 w-full min-w-0 items-center gap-2 rounded-lg border border-mgmt-outline-variant bg-white px-3 text-left transition-colors hover:bg-mgmt-surface-container-low"
               aria-label="Filter by therapist"
+              aria-haspopup="menu"
+              aria-expanded={therapistMenuOpen}
             >
-              <option value="">All therapists</option>
-              {therapistOptions.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            <MaterialSymbol
-              name="expand_more"
-              className="pointer-events-none absolute right-2 text-[20px] text-mgmt-on-surface-variant"
-            />
+              {selectedTherapist ? (
+                <LetterAvatar label={therapistInitials(selectedTherapist.name)} className="h-7 w-7 text-[11px]" />
+              ) : (
+                <CafsTeamAvatar className="h-7 w-7 text-[0.5rem]" />
+              )}
+              <span className="min-w-0 flex-1 truncate text-sm text-mgmt-on-surface">
+                {selectedTherapist ? therapistDisplayLabel(selectedTherapist.name) : "Team"}
+              </span>
+              <MaterialSymbol
+                name="expand_more"
+                className={cx(
+                  "shrink-0 text-[20px] text-mgmt-on-surface-variant transition-transform",
+                  therapistMenuOpen && "rotate-180",
+                )}
+              />
+            </button>
+
+            {therapistMenuOpen ? (
+              <div
+                className="absolute left-0 top-full z-50 mt-2 w-[min(100%,20rem)] overflow-hidden rounded-xl border border-mgmt-outline-variant/20 bg-white p-2 shadow-lg"
+                role="menu"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setTherapistFilter("");
+                    setTherapistMenuOpen(false);
+                  }}
+                  className={cx(
+                    "flex w-full items-center gap-2 rounded-lg px-2 py-2.5 text-left text-sm transition-colors",
+                    therapistFilter === ""
+                      ? "text-mgmt-on-surface"
+                      : "text-mgmt-on-surface hover:bg-[#F0F0F0]",
+                  )}
+                >
+                  <span className="flex w-5 shrink-0 items-center justify-center">
+                    {therapistFilter === "" ? (
+                      <MaterialSymbol name="check" className="text-[18px] text-mgmt-on-surface" />
+                    ) : null}
+                  </span>
+                  <CafsTeamAvatar />
+                  <span className="min-w-0 truncate font-medium">Team</span>
+                </button>
+
+                <div className="my-2 border-t border-mgmt-outline-variant/25" aria-hidden />
+
+                {therapistOptions.map((t) => {
+                  const isSelected = therapistFilter === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setTherapistFilter(t.id);
+                        setTherapistMenuOpen(false);
+                      }}
+                      className={cx(
+                        "flex w-full items-center gap-2 rounded-lg px-2 py-2.5 text-left text-sm transition-colors",
+                        isSelected ? "text-mgmt-on-surface" : "text-mgmt-on-surface hover:bg-[#F0F0F0]",
+                      )}
+                    >
+                      <span className="flex w-5 shrink-0 items-center justify-center">
+                        {isSelected ? (
+                          <MaterialSymbol name="check" className="text-[18px] text-mgmt-on-surface" />
+                        ) : null}
+                      </span>
+                      <LetterAvatar label={therapistInitials(t.name)} />
+                      <span className="min-w-0 truncate">{therapistDisplayLabel(t.name)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
 
           <div className="relative min-w-0 w-full max-w-sm flex-1 sm:min-w-[220px]">
@@ -324,13 +424,25 @@ export default function AdminServicesHome() {
               >
                 <LinkIcon className="h-4 w-4" />
               </button>
-              <button
-                type="button"
-                className="rounded-lg p-1.5 text-mgmt-on-surface-variant hover:text-mgmt-on-surface"
-                aria-label={`More actions for ${serviceDisplayTitle(service)}`}
-              >
-                <MoreIcon className="h-4 w-4" />
-              </button>
+              <ListItemActionsMenu
+                itemLabel={serviceDisplayTitle(service)}
+                open={actionsMenuId === service.id}
+                onOpenChange={(open) => setActionsMenuId(open ? service.id : null)}
+                hidden={Boolean(hiddenById[service.id])}
+                onEdit={() => setServiceModal(service)}
+                onHiddenChange={(hidden) =>
+                  setHiddenById((prev) => ({ ...prev, [service.id]: hidden }))
+                }
+                onDelete={() => {
+                  if (!window.confirm(`Delete "${serviceDisplayTitle(service)}"?`)) return;
+                  setServices((prev) => prev.filter((s) => s.id !== service.id));
+                  setHiddenById((prev) => {
+                    const next = { ...prev };
+                    delete next[service.id];
+                    return next;
+                  });
+                }}
+              />
             </div>
           </div>
         ))}
