@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import AdminCustomerDetail, { type AdminCustomerModel } from "@/components/admin/AdminCustomerDetail";
+import { adminSidebarInsetLeft } from "@/components/admin/adminSidebarLayout";
+import { SECONDARY_NAV_HEADING_CLASS } from "@/components/admin/secondaryNavLayout";
 import CreateCustomerModal from "@/components/admin/CreateCustomerModal";
 import {
   buildAdminAppointmentDays,
@@ -160,13 +162,16 @@ export default function AdminCustomersHome() {
     <div className="flex h-full min-h-0 w-full overflow-hidden bg-mgmt-surface-container-lowest">
       {/* Desktop: fixed full-height customer list column */}
       <div
-        className="hidden overflow-hidden border-r border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest lg:fixed lg:left-64 lg:top-0 lg:z-40 lg:flex lg:h-full lg:w-96 lg:flex-col"
+        className={cx(
+          "hidden overflow-hidden border-r border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest lg:fixed lg:top-0 lg:z-40 lg:flex lg:h-full lg:w-72 lg:flex-col",
+          adminSidebarInsetLeft("lg"),
+        )}
         data-purpose="customers-list-fixed"
       >
       <section className="flex min-h-0 flex-1 flex-col bg-mgmt-surface-container-lowest">
         <header className="shrink-0 px-6 pb-4 pt-6">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-2xl font-semibold text-mgmt-on-surface">Customers</h2>
+            <h2 className={SECONDARY_NAV_HEADING_CLASS}>Customers</h2>
             <button
               type="button"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-mgmt-on-surface text-mgmt-surface-container-lowest shadow-md transition-transform hover:bg-mgmt-on-background active:scale-95"
@@ -237,7 +242,7 @@ export default function AdminCustomersHome() {
         </div>
       </section>
       </div>
-      <div className="hidden w-96 shrink-0 lg:block" aria-hidden />
+      <div className="hidden w-72 shrink-0 lg:block" aria-hidden />
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-mgmt-surface-container-lowest">
         {/* Mobile: customer selector + search */}

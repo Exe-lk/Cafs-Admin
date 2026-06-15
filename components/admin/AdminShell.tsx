@@ -1,9 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import AdminSidebar from "@/components/admin/AdminSidebar";
+import {
+  adminSidebarWidthStyle,
+} from "@/components/admin/adminSidebarLayout";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 
 function cx(...classes: Array<string | false | null | undefined>) {
@@ -23,16 +26,46 @@ function titleForPath(pathname: string | null): string {
   return "Admin";
 }
 
+const SIDEBAR_COLLAPSED_KEY = "admin-sidebar-collapsed";
+
 export default function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const title = useMemo(() => titleForPath(pathname), [pathname]);
 
+  useEffect(() => {
+    try {
+      setSidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true");
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  function toggleSidebarCollapsed() {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
+  }
+
   return (
-    <div className="theraphist-theme light flex h-dvh flex-col overflow-hidden bg-mgmt-background font-sans text-mgmt-on-surface">
+    <div
+      className="theraphist-theme light flex h-dvh flex-col overflow-hidden bg-mgmt-background font-sans text-mgmt-on-surface"
+      style={adminSidebarWidthStyle(sidebarCollapsed)}
+    >
       {/* Desktop sidebar */}
       <div className="hidden md:block">
-        <AdminSidebar className="fixed left-0 top-0 z-50 h-dvh w-64" />
+        <AdminSidebar
+          className="fixed left-0 top-0 z-50 h-dvh"
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapsed}
+        />
       </div>
 
       {/* Mobile top bar */}
@@ -43,7 +76,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-mgmt-on-surface-variant hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface"
           aria-label="Open menu"
         >
-          <MaterialSymbol name="menu" className="text-[22px]" />
+          <MaterialSymbol name="menu" size={18} />
         </button>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-mgmt-on-surface">{title}</p>
@@ -86,7 +119,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-mgmt-on-surface-variant hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface"
                 aria-label="Close menu"
               >
-                <MaterialSymbol name="close" className="text-[22px]" />
+                <MaterialSymbol name="close" size={18} />
               </button>
             }
           />
@@ -94,7 +127,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       </div>
 
       {/* Content */}
-      <div className="ml-0 flex min-h-0 flex-1 flex-col overflow-hidden md:ml-64">
+      <div
+        className={cx(
+          "ml-0 flex min-h-0 flex-1 flex-col overflow-hidden transition-[margin] duration-200 ease-in-out",
+          sidebarCollapsed ? "md:ml-16" : "md:ml-64",
+        )}
+      >
         {children}
       </div>
     </div>

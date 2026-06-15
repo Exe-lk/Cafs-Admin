@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import {
+  SECONDARY_NAV_HEADING_CLASS,
+  SECONDARY_NAV_HEADING_WRAP_CLASS,
+} from "@/components/admin/secondaryNavLayout";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -20,8 +24,8 @@ export default function ServiceTypesSubNav() {
       className="flex min-h-0 w-full flex-1 flex-col bg-mgmt-surface-container-lowest"
       data-purpose="secondary-navigation"
     >
-      <div className="p-6">
-        <h2 className="text-lg font-bold text-mgmt-on-surface">Service & Class types</h2>
+      <div className={SECONDARY_NAV_HEADING_WRAP_CLASS}>
+        <h2 className={SECONDARY_NAV_HEADING_CLASS}>Service & Class types</h2>
       </div>
       <div className="flex-1 px-4 pb-6">
         <div className="mb-4">

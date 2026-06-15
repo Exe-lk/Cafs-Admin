@@ -4,12 +4,19 @@ import { useEffect, useMemo, useState } from "react";
 import TherapistsDirectoryColumn from "@/components/admin/TherapistsDirectoryColumn";
 import AdminCalendarHome from "@/components/admin/AdminCalendarHome";
 import CreateTherapistModal from "@/components/admin/CreateTherapistModal";
+import { adminSidebarInsetLeft } from "@/components/admin/adminSidebarLayout";
+import { useTeamPanelOpen } from "@/components/admin/useTeamPanelOpen";
 import { type AdminTherapistListItem, useAdminTherapists } from "@/components/admin/useAdminTherapists";
+
+function cx(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
 
 export default function TheraphistHomePage() {
   const { therapists, loading, refetch } = useAdminTherapists();
   const [selectedId, setSelectedId] = useState<string>("");
   const [createTherapistOpen, setCreateTherapistOpen] = useState(false);
+  const [teamPanelOpen, setTeamPanelOpen] = useTeamPanelOpen(true);
 
   const selected = useMemo<AdminTherapistListItem | undefined>(() => {
     return therapists.find((t) => t.id === selectedId) ?? therapists[0];
@@ -47,25 +54,35 @@ export default function TheraphistHomePage() {
         </div>
       </div>
 
-      {/* Desktop: fixed full-viewport white column + spacer (matches settings / therapist shell) */}
-      <div
-        className="hidden overflow-hidden border-r border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest lg:fixed lg:left-64 lg:top-0 lg:z-40 lg:flex lg:h-dvh lg:w-72 lg:flex-col"
-        data-purpose="therapist-directory-fixed"
-      >
-        <TherapistsDirectoryColumn
-          therapists={therapists}
-          selectedId={selectedId}
-          onSelect={(t) => setSelectedId(t.id)}
-          onAdd={() => setCreateTherapistOpen(true)}
-        />
-      </div>
-      <div className="hidden w-72 shrink-0 lg:block" aria-hidden />
+      {/* Desktop: fixed full-viewport team column (hidden entirely when collapsed) */}
+      {teamPanelOpen ? (
+        <>
+          <div
+            className={cx(
+              "hidden overflow-hidden border-r border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest lg:fixed lg:top-0 lg:z-40 lg:flex lg:h-dvh lg:w-72 lg:flex-col",
+              adminSidebarInsetLeft("lg"),
+            )}
+            data-purpose="therapist-directory-fixed"
+          >
+            <TherapistsDirectoryColumn
+              therapists={therapists}
+              selectedId={selectedId}
+              onSelect={(t) => setSelectedId(t.id)}
+              onAdd={() => setCreateTherapistOpen(true)}
+              onCollapse={() => setTeamPanelOpen(false)}
+            />
+          </div>
+          <div className="hidden w-72 shrink-0 lg:block" aria-hidden />
+        </>
+      ) : null}
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <AdminCalendarHome
           therapistId={selected?.id}
           therapistTimezone={selected?.timezone}
           onAddTherapist={() => setCreateTherapistOpen(true)}
+          teamPanelOpen={teamPanelOpen}
+          onOpenTeamPanel={() => setTeamPanelOpen(true)}
         />
       </div>
 

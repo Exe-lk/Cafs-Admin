@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import { SECONDARY_NAV_HEADING_CLASS } from "@/components/admin/secondaryNavLayout";
 import { type AdminTherapistListItem, useAdminTherapists } from "@/components/admin/useAdminTherapists";
 
 function initials(name: string) {
@@ -16,11 +17,13 @@ export default function TherapistsDirectoryColumn({
   selectedId,
   onSelect,
   onAdd,
+  onCollapse,
 }: {
   therapists?: AdminTherapistListItem[];
   selectedId?: string;
   onSelect?: (t: AdminTherapistListItem) => void;
   onAdd?: () => void;
+  onCollapse?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const { therapists: fetched, loading, error } = useAdminTherapists();
@@ -47,9 +50,17 @@ export default function TherapistsDirectoryColumn({
     <aside className="flex h-full min-h-0 w-full flex-col bg-mgmt-surface-container-lowest">
       <div className="sticky top-0 z-40 shrink-0 border-b border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest px-5 py-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-bold  tracking-widest text-mgmt-on-surface-variant">
-            Team
-          </h2>
+          <h2 className={SECONDARY_NAV_HEADING_CLASS}>Team</h2>
+          {onCollapse ? (
+            <button
+              type="button"
+              onClick={onCollapse}
+              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-mgmt-on-surface-variant transition-colors hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface lg:inline-flex"
+              aria-label="Hide team panel"
+            >
+              <MaterialSymbol name="chevron_left" className="text-[20px]" />
+            </button>
+          ) : null}
           {/* <button
             type="button"
             className="flex items-center gap-2 rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-xs font-semibold text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container"

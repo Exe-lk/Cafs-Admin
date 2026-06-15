@@ -7,9 +7,11 @@ import SettingsTabs from "@/components/admin/settings/SettingsTabs";
 export default function SettingsHeader({
   displayName = "Thilina Dilshan",
   actions,
+  prefix,
 }: {
   displayName?: string;
   actions?: React.ReactNode;
+  prefix?: React.ReactNode;
 }) {
   const location = "Colombo, 1, LK";
   const localTime = "11:26 AM";
@@ -24,6 +26,7 @@ export default function SettingsHeader({
       <header className="px-4 pt-6 pb-4 sm:px-6 lg:px-10 lg:pt-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div className="flex min-w-0 items-start gap-4">
+            {prefix ? <div className="shrink-0 self-center">{prefix}</div> : null}
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-mgmt-primary-container text-lg font-bold text-mgmt-on-primary-container">
               {initials}
             </div>

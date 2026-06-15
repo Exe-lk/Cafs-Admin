@@ -150,9 +150,9 @@ function parseSheet(sheet: unknown): ClientInformationSheetPayload | null {
   return sheet as ClientInformationSheetPayload;
 }
 
-function EmptyState() {
+function EmptyState({ embedded = false }: { embedded?: boolean }) {
   return (
-    <div className="py-10">
+    <div className={embedded ? "" : "py-10"}>
       <div className="mx-auto max-w-md rounded-2xl border border-dashed border-mgmt-outline-variant bg-mgmt-surface-container-low px-6 py-12 text-center">
         <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-mgmt-surface-container-high">
           <MaterialSymbol name="assignment" className="text-3xl text-mgmt-on-surface-variant" />
@@ -169,9 +169,9 @@ function EmptyState() {
   );
 }
 
-function FormDetailsContent({ sheet }: { sheet: unknown }) {
+function FormDetailsContent({ sheet, embedded = false }: { sheet: unknown; embedded?: boolean }) {
   const data = parseSheet(sheet);
-  if (!data) return <EmptyState />;
+  if (!data) return <EmptyState embedded={embedded} />;
 
   const submittedAt = formatSubmittedAt(data.submittedAt);
   const clientStatusItems = getClientStatusItems(data.clientStatus);
@@ -183,7 +183,7 @@ function FormDetailsContent({ sheet }: { sheet: unknown }) {
   const reasons = displayValue(data.reasonsForSupport);
 
   return (
-    <div className="space-y-6 py-10">
+    <div className={cx("space-y-6", !embedded && "py-10")}>
       <div className="flex flex-col gap-4 rounded-2xl border border-mgmt-outline-variant/30 bg-mgmt-surface-container-lowest p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div className="flex min-w-0 items-start gap-4">
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-mgmt-primary-container">
@@ -288,20 +288,31 @@ export default function AdminCustomerFormDetailsTab({
   sheet,
   loading,
   error,
+  embedded = false,
 }: {
   sheet: unknown;
   loading?: boolean;
   error?: string | null;
+  embedded?: boolean;
 }) {
   if (loading) {
     return (
-      <p className="py-10 text-center text-sm text-mgmt-on-surface-variant">Loading form details…</p>
+      <p
+        className={cx(
+          "text-center text-sm text-mgmt-on-surface-variant",
+          embedded ? "py-6" : "py-10",
+        )}
+      >
+        Loading form details…
+      </p>
     );
   }
 
   if (error) {
-    return <p className="py-10 text-center text-sm text-red-700">{error}</p>;
+    return (
+      <p className={cx("text-center text-sm text-red-700", embedded ? "py-6" : "py-10")}>{error}</p>
+    );
   }
 
-  return <FormDetailsContent sheet={sheet} />;
+  return <FormDetailsContent sheet={sheet} embedded={embedded} />;
 }

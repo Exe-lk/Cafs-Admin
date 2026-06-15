@@ -54,6 +54,7 @@ type TabKey = "details" | "history";
 export default function EditAppointmentModal({
   appointment,
   therapistTimezone,
+  readOnly = false,
   onClose,
   onSave,
   onDelete,
@@ -61,6 +62,7 @@ export default function EditAppointmentModal({
 }: {
   appointment: AdminEditableAppointment;
   therapistTimezone?: string;
+  readOnly?: boolean;
   onClose: () => void;
   onSave: (next: AdminEditableAppointment) => void;
   onDelete: (args: { dayId: string; sessionId: string }) => void;
@@ -208,8 +210,9 @@ export default function EditAppointmentModal({
         ? "Rejected"
         : "Pending";
   const showApprovalActions =
-    draft.appointmentStatus === "pending_payment" ||
-    draft.appointmentStatus === "pending_confirmation";
+    !readOnly &&
+    (draft.appointmentStatus === "pending_payment" ||
+      draft.appointmentStatus === "pending_confirmation");
 
   const tabBtn = (key: TabKey, label: string) => {
     const active = tab === key;
@@ -249,7 +252,7 @@ export default function EditAppointmentModal({
         >
           <div className="flex items-center justify-between px-6 pt-5 pb-3">
             <h3 id={titleId} className="text-lg font-semibold text-mgmt-on-surface">
-              Edit appointment
+              {readOnly ? "View appointment" : "Edit appointment"}
             </h3>
             <button
               type="button"
@@ -332,8 +335,10 @@ export default function EditAppointmentModal({
                 </label>
                 <input
                   value={draft.title}
+                  readOnly={readOnly}
+                  disabled={readOnly}
                   onChange={(e) => setDraft((p) => ({ ...p, title: e.target.value }))}
-                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="Appointment title…"
                 />
               </div>
@@ -344,8 +349,10 @@ export default function EditAppointmentModal({
                 </label>
                 <input
                   value={draft.providerName}
+                  readOnly={readOnly}
+                  disabled={readOnly}
                   onChange={(e) => setDraft((p) => ({ ...p, providerName: e.target.value }))}
-                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="Provider…"
                 />
               </div>
@@ -356,8 +363,10 @@ export default function EditAppointmentModal({
                 </label>
                 <input
                   value={draft.timeRange}
+                  readOnly={readOnly}
+                  disabled={readOnly}
                   onChange={(e) => setDraft((p) => ({ ...p, timeRange: e.target.value }))}
-                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="e.g. 2:00PM – 3:00PM"
                 />
               </div>
@@ -368,8 +377,10 @@ export default function EditAppointmentModal({
                 </label>
                 <input
                   value={draft.dateLine}
+                  readOnly={readOnly}
+                  disabled={readOnly}
                   onChange={(e) => setDraft((p) => ({ ...p, dateLine: e.target.value }))}
-                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="e.g. 6 JAN, TUE"
                 />
               </div>
@@ -380,8 +391,10 @@ export default function EditAppointmentModal({
                 </label>
                 <input
                   value={draft.videoLink ?? ""}
+                  readOnly={readOnly}
+                  disabled={readOnly}
                   onChange={(e) => setDraft((p) => ({ ...p, videoLink: e.target.value }))}
-                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="Paste meeting URL…"
                 />
               </div>
@@ -393,8 +406,10 @@ export default function EditAppointmentModal({
                 <div className="mt-1 flex items-center gap-2">
                   <input
                     value={draft.proofUrl ?? ""}
+                    readOnly={readOnly}
+                    disabled={readOnly}
                     onChange={(e) => setDraft((p) => ({ ...p, proofUrl: e.target.value }))}
-                    className="w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                    className="w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                     placeholder="Paste proof URL…"
                   />
                   <a
@@ -423,13 +438,16 @@ export default function EditAppointmentModal({
                 </label>
                 <textarea
                   value={draft.notes ?? ""}
+                  readOnly={readOnly}
+                  disabled={readOnly}
                   onChange={(e) => setDraft((p) => ({ ...p, notes: e.target.value }))}
-                  className="mt-1 min-h-24 w-full resize-none rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                  className="mt-1 min-h-24 w-full resize-none rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="Type notes…"
                 />
               </div>
             </div>
 
+            {!readOnly ? (
             <div className="rounded-xl border border-mgmt-outline-variant/15 bg-white">
               <button
                 type="button"
@@ -499,12 +517,13 @@ export default function EditAppointmentModal({
                 </div>
               ) : null}
             </div>
+            ) : null}
             </>
             ) : null}
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-mgmt-surface-container-low p-4">
-            {tab === "history" ? (
+            {readOnly || tab === "history" ? (
               <div className="flex w-full justify-end">
                 <button
                   type="button"

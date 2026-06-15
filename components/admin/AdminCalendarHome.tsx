@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CalendarPreferencesDrawer from "@/components/admin/CalendarPreferencesDrawer";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import TeamPanelOpenButton from "@/components/admin/TeamPanelOpenButton";
 import CreateAppointmentModal, {
   type CreateAppointmentInitialSchedule,
 } from "@/components/admin/CreateAppointmentModal";
@@ -40,6 +41,10 @@ import {
   ymdToWallClockDate,
   zonedLocalYmdTimeToUtc,
 } from "@/lib/timezone";
+
+function cx(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
 
 const TIME_LABELS = Array.from({ length: 24 }, (_, i) => {
   if (i === 0) return "12 AM";
@@ -198,10 +203,14 @@ export default function AdminCalendarHome({
   therapistId,
   therapistTimezone,
   onAddTherapist,
+  teamPanelOpen = true,
+  onOpenTeamPanel,
 }: {
   therapistId?: string;
   therapistTimezone?: string;
   onAddTherapist?: () => void;
+  teamPanelOpen?: boolean;
+  onOpenTeamPanel?: () => void;
 }) {
   const [timeZone, setTimeZone] = useState(() => normalizeTimeZone(therapistTimezone));
   const [view, setView] = useState<CalendarView>("week");
@@ -499,6 +508,7 @@ export default function AdminCalendarHome({
   }, [therapistId]);
 
   const gridColsClass = view === "day" ? "grid-cols-[80px_1fr]" : "grid-cols-[80px_repeat(7,1fr)]";
+  const showTeamReopen = !teamPanelOpen && Boolean(onOpenTeamPanel);
 
   return (
     <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -615,8 +625,17 @@ export default function AdminCalendarHome({
       ) : null}
 
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-mgmt-surface-container-lowest">
-        <header className="z-40 flex min-h-[4.5rem] shrink-0 items-center justify-between border-b border-mgmt-outline-variant/10 bg-white/80 px-8 py-4 backdrop-blur-xl">
-          <div className="ml-35 flex items-center gap-6">
+        <header className="z-40 grid min-h-[4.5rem] shrink-0 grid-cols-[15%_minmax(0,1fr)_auto] items-center gap-x-4 border-b border-mgmt-outline-variant/10 bg-white/80 px-8 py-4 backdrop-blur-xl">
+          <div className="flex min-w-0 items-center">
+            {showTeamReopen ? <TeamPanelOpenButton onClick={onOpenTeamPanel!} /> : null}
+          </div>
+
+          <div
+            className={cx(
+              "flex min-w-0 items-center gap-6",
+              showTeamReopen ? "justify-center" : "justify-start",
+            )}
+          >
             <div className="relative" ref={datePickerRef}>
               <button
                 type="button"
