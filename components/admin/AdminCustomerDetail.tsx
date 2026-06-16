@@ -740,7 +740,7 @@ export default function AdminCustomerDetail({
                     ? {
                         ...s,
                         title: next.title,
-                        providerName: next.providerName,
+                        providerName: next.therapistName ?? next.providerName ?? s.providerName,
                         providerAvatarUrl: next.providerAvatarUrl ?? null,
                         videoLink: next.videoLink ?? "",
                         notes: next.notes ?? "",

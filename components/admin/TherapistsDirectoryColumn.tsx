@@ -12,21 +12,71 @@ function initials(name: string) {
   return (a + b).toUpperCase();
 }
 
+function TeamCheckbox({
+  checked,
+  indeterminate,
+  onChange,
+  ariaLabel,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  onChange: () => void;
+  ariaLabel: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={indeterminate ? "mixed" : checked}
+      aria-label={ariaLabel}
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange();
+      }}
+      className={[
+        "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border p-1.5 transition-colors",
+        checked || indeterminate
+          ? "border-mgmt-on-surface bg-mgmt-on-surface text-white"
+          : "border-mgmt-outline-variant/40 bg-white hover:border-mgmt-outline-variant",
+      ].join(" ")}
+    >
+      {checked ? (
+        <MaterialSymbol name="check" className="text-[11px] leading-none" />
+      ) : indeterminate ? (
+        <span className="h-0.5 w-2 rounded-full bg-white" aria-hidden />
+      ) : null}
+    </button>
+  );
+}
+
+function TherapistAvatar({ name }: { name: string }) {
+  return (
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#E7E7E7] text-xs font-bold text-[#5F5F5F]">
+      {initials(name)}
+    </div>
+  );
+}
+
 export default function TherapistsDirectoryColumn({
   therapists,
   selectedId,
   onSelect,
+  selectedIds,
+  onSelectedIdsChange,
   onAdd,
   onCollapse,
 }: {
   therapists?: AdminTherapistListItem[];
   selectedId?: string;
   onSelect?: (t: AdminTherapistListItem) => void;
+  selectedIds?: string[];
+  onSelectedIdsChange?: (ids: string[]) => void;
   onAdd?: () => void;
   onCollapse?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const { therapists: fetched, loading, error } = useAdminTherapists();
+  const multiSelect = Boolean(onSelectedIdsChange);
 
   const list: AdminTherapistListItem[] = useMemo(() => {
     if (therapists) return therapists;
@@ -46,6 +96,46 @@ export default function TherapistsDirectoryColumn({
     });
   }, [list, query]);
 
+  const filteredIds = useMemo(() => filtered.map((t) => t.id), [filtered]);
+  const selectedSet = useMemo(() => new Set(selectedIds ?? []), [selectedIds]);
+  const allListIds = useMemo(() => list.map((t) => t.id), [list]);
+  const allTeamSelected =
+    allListIds.length > 0 && allListIds.every((id) => selectedSet.has(id));
+  const allFilteredSelected =
+    filteredIds.length > 0 && filteredIds.every((id) => selectedSet.has(id));
+  const someFilteredSelected =
+    filteredIds.some((id) => selectedSet.has(id)) && !allFilteredSelected;
+
+  function toggleAllTeam() {
+    if (!onSelectedIdsChange) return;
+    const current = selectedIds ?? [];
+    const hasSearch = query.trim().length > 0;
+
+    if (hasSearch ? allFilteredSelected : allTeamSelected) {
+      if (hasSearch) {
+        onSelectedIdsChange(current.filter((id) => !filteredIds.includes(id)));
+      } else {
+        onSelectedIdsChange([]);
+      }
+      return;
+    }
+
+    const next = new Set(current);
+    const idsToAdd = hasSearch ? filteredIds : allListIds;
+    for (const id of idsToAdd) next.add(id);
+    onSelectedIdsChange([...next]);
+  }
+
+  function toggleTherapist(id: string) {
+    if (!onSelectedIdsChange) return;
+    const current = selectedIds ?? [];
+    if (current.includes(id)) {
+      onSelectedIdsChange(current.filter((x) => x !== id));
+    } else {
+      onSelectedIdsChange([...current, id]);
+    }
+  }
+
   return (
     <aside className="flex h-full min-h-0 w-full flex-col bg-mgmt-surface-container-lowest">
       <div className="sticky top-0 z-40 shrink-0 border-b border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest px-5 py-4">
@@ -61,14 +151,6 @@ export default function TherapistsDirectoryColumn({
               <MaterialSymbol name="chevron_left" className="text-[20px]" />
             </button>
           ) : null}
-          {/* <button
-            type="button"
-            className="flex items-center gap-2 rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-xs font-semibold text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container"
-            onClick={onAdd}
-          >
-            <MaterialSymbol name="person_add" className="text-[18px]" />
-            Add
-          </button> */}
         </div>
 
         <div className="mt-3 flex items-center gap-2 rounded-xl bg-mgmt-surface-container-low px-3 py-2">
@@ -76,7 +158,7 @@ export default function TherapistsDirectoryColumn({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search therapists…"
+            placeholder="Search"
             className="w-full bg-transparent text-sm text-mgmt-on-surface outline-none placeholder:text-mgmt-on-surface-variant"
           />
           {query.trim().length > 0 && (
@@ -94,17 +176,56 @@ export default function TherapistsDirectoryColumn({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {loading ? (
-          <div className="px-4 py-8 text-sm text-mgmt-on-surface-variant">
-            Loading therapists…
-          </div>
+          <div className="px-4 py-8 text-sm text-mgmt-on-surface-variant">Loading therapists…</div>
         ) : error ? (
-          <div className="px-4 py-8 text-sm text-red-700">
-            {error}
-          </div>
+          <div className="px-4 py-8 text-sm text-red-700">{error}</div>
         ) : filtered.length === 0 ? (
-          <div className="px-4 py-8 text-sm text-mgmt-on-surface-variant">
-            No therapists found.
-          </div>
+          <div className="px-4 py-8 text-sm text-mgmt-on-surface-variant">No therapists found.</div>
+        ) : multiSelect ? (
+          <ul className="space-y-0.5">
+            <li>
+              <button
+                type="button"
+                onClick={toggleAllTeam}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-mgmt-surface-container-low"
+              >
+                <TeamCheckbox
+                  checked={allTeamSelected}
+                  indeterminate={!allTeamSelected && someFilteredSelected}
+                  onChange={toggleAllTeam}
+                  ariaLabel={`All team (${list.length})`}
+                />
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#E7E7E7] text-mgmt-on-surface-variant">
+                  <MaterialSymbol name="groups" className="text-[20px]" />
+                </div>
+                <p className="min-w-0 flex-1 truncate text-sm font-semibold text-mgmt-on-surface">
+                  All team ({list.length})
+                </p>
+              </button>
+            </li>
+            {filtered.map((t) => {
+              const checked = selectedSet.has(t.id);
+              return (
+                <li key={t.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggleTherapist(t.id)}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-mgmt-surface-container-low"
+                  >
+                    <TeamCheckbox
+                      checked={checked}
+                      onChange={() => toggleTherapist(t.id)}
+                      ariaLabel={t.name}
+                    />
+                    <TherapistAvatar name={t.name} />
+                    <p className="min-w-0 flex-1 truncate text-sm font-semibold text-mgmt-on-surface">
+                      {t.name}
+                    </p>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         ) : (
           <ul className="space-y-1">
             {filtered.map((t) => (
@@ -136,7 +257,7 @@ export default function TherapistsDirectoryColumn({
                       </span>
                     </div>
                     <p className="truncate text-[0.75rem] text-mgmt-on-surface-variant">
-                      {t.specialty ?? "Therapist"} · {t.email}
+                      {t.specialty ?? "Therapist"}
                     </p>
                   </div>
                   <div className="mt-1 shrink-0 text-mgmt-on-surface-variant opacity-0 transition-opacity group-hover:opacity-100">
@@ -151,4 +272,3 @@ export default function TherapistsDirectoryColumn({
     </aside>
   );
 }
-

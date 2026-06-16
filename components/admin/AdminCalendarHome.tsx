@@ -15,6 +15,10 @@ import {
   approvalStatusForAppointmentStatus,
 } from "@/lib/calendar/appointmentStatus";
 import {
+  calendarPaymentBadge,
+  type CalendarPaymentBadge,
+} from "@/lib/calendar/calendarEventDisplay";
+import {
   isAppointmentStartInPast,
   PAST_APPOINTMENT_MESSAGE,
 } from "@/lib/calendar/scheduling";
@@ -106,11 +110,15 @@ function CalendarViewGlyph({ view, className }: { view: CalendarView; className?
 
 type CalEvent = {
   id: string;
+  therapistId: string;
+  therapistName?: string;
   startUtc: Date;
   endUtc: Date;
   title: string;
-  subtitle: string;
-  variant: "therapy" | "neutral";
+  customerName: string;
+  appointmentTypeLine: string;
+  paymentBadge: CalendarPaymentBadge;
+  appointmentType: "online" | "in_person";
   durationMin?: number;
   proofUrl?: string;
   approvalStatus?: "pending" | "accepted" | "rejected";
@@ -123,6 +131,35 @@ type CalEvent = {
     | "no_show"
     | "expired";
 };
+
+type CalEventLayout = {
+  ev: CalEvent;
+  column: number;
+  columnCount: number;
+};
+
+function layoutCellEvents(events: CalEvent[]): CalEventLayout[] {
+  if (events.length <= 1) {
+    return events.map((ev) => ({ ev, column: 0, columnCount: 1 }));
+  }
+
+  const uniqueTherapists = new Set(events.map((e) => e.therapistId));
+  if (uniqueTherapists.size <= 1) {
+    return events.map((ev) => ({ ev, column: 0, columnCount: 1 }));
+  }
+
+  const therapistOrder = [...uniqueTherapists].sort();
+  const columnCount = therapistOrder.length;
+  const therapistToColumn = new Map(therapistOrder.map((id, i) => [id, i]));
+
+  return events.map((ev) => ({
+    ev,
+    column: therapistToColumn.get(ev.therapistId) ?? 0,
+    columnCount,
+  }));
+}
+
+type CalEventAppearance = "past" | "online" | "in_person" | "rejected";
 
 type CalTimeBlock = {
   id: string;
@@ -186,6 +223,52 @@ function titleForAppointmentType(t: string | null) {
   return "Appointment";
 }
 
+function isRejectedCalendarEvent(ev: CalEvent): boolean {
+  return (
+    ev.approvalStatus === "rejected" ||
+    ev.appointmentStatus === "cancelled" ||
+    ev.appointmentStatus === "no_show" ||
+    ev.appointmentStatus === "expired"
+  );
+}
+
+function calendarEventAppearance(ev: CalEvent): CalEventAppearance {
+  if (isRejectedCalendarEvent(ev)) return "rejected";
+  if (isAppointmentStartInPast(ev.startUtc)) return "past";
+  if (ev.appointmentType === "in_person") return "in_person";
+  return "online";
+}
+
+const CAL_EVENT_BLOCK_STYLES: Record<
+  CalEventAppearance,
+  { container: string; title: string; subtitle: string }
+> = {
+  online: {
+    container:
+      "border-l-4 border-[#2d6a4f] bg-[#cbede1] shadow-sm hover:brightness-[0.98]",
+    title: "text-[#1d5c42]",
+    subtitle: "text-[#1d5c42]/80",
+  },
+  in_person: {
+    container:
+      "border-l-4 border-amber-500 bg-amber-100 shadow-sm hover:brightness-[0.98]",
+    title: "text-amber-950",
+    subtitle: "text-amber-900/80",
+  },
+  past: {
+    container:
+      "border-l-4 border-slate-400 bg-slate-100 shadow-sm hover:bg-slate-200/70",
+    title: "text-slate-700",
+    subtitle: "text-slate-500",
+  },
+  rejected: {
+    container:
+      "border-l-4 border-red-500 bg-red-100 shadow-sm hover:bg-red-200/70",
+    title: "text-red-900",
+    subtitle: "text-red-800/80",
+  },
+};
+
 function pad2(n: number) {
   return n < 10 ? `0${n}` : `${n}`;
 }
@@ -199,19 +282,31 @@ function slotToInitialSchedule(colDate: Date, hour: number): CreateAppointmentIn
   };
 }
 
+type CalendarTherapistInfo = {
+  name: string;
+  timezone?: string;
+};
+
 export default function AdminCalendarHome({
-  therapistId,
+  therapistIds,
   therapistTimezone,
+  therapistsById,
   onAddTherapist,
   teamPanelOpen = true,
   onOpenTeamPanel,
 }: {
-  therapistId?: string;
+  therapistIds?: string[];
   therapistTimezone?: string;
+  therapistsById?: Record<string, CalendarTherapistInfo>;
   onAddTherapist?: () => void;
   teamPanelOpen?: boolean;
   onOpenTeamPanel?: () => void;
 }) {
+  const primaryTherapistId = therapistIds?.[0];
+  const therapistIdsKey = useMemo(
+    () => (therapistIds ?? []).slice().sort().join(","),
+    [therapistIds],
+  );
   const [timeZone, setTimeZone] = useState(() => normalizeTimeZone(therapistTimezone));
   const [view, setView] = useState<CalendarView>("week");
 
@@ -305,7 +400,8 @@ export default function AdminCalendarHome({
   }, [events]);
 
   useEffect(() => {
-    if (!therapistId) {
+    const ids = therapistIds ?? [];
+    if (ids.length === 0) {
       setEvents([]);
       setTimeBlocks([]);
       setWorkingHours([]);
@@ -315,10 +411,37 @@ export default function AdminCalendarHome({
     }
 
     const { from, to } = rangeForView(view, anchor, weekStartYmd, timeZone);
-    const sp = new URLSearchParams();
-    sp.set("from", from.toISOString());
-    sp.set("to", to.toISOString());
-    sp.set("therapistId", therapistId);
+
+    type CalendarApiData = {
+      therapistTimezone?: string;
+      items: Array<{
+        therapistId: string;
+        type: "appointment";
+        appointmentId: string;
+        startAt: string;
+        endAt: string;
+        appointmentType: "online" | "in_person";
+        status: string;
+        clientName: string;
+        serviceName: string;
+        appointmentTypeLine: string;
+        paymentBadge: CalendarPaymentBadge;
+        proofUrl?: string | null;
+      }>;
+      timeBlocks?: Array<{
+        timeBlockId: string;
+        startAt: string;
+        endAt: string;
+        kind: TimeBlockKind;
+        label: string;
+      }>;
+      workingHours?: Array<{
+        dayOfWeek: number;
+        startTime: string;
+        endTime: string;
+        isActive: boolean;
+      }>;
+    };
 
     const ac = new AbortController();
     setLoading(true);
@@ -326,88 +449,82 @@ export default function AdminCalendarHome({
 
     (async () => {
       try {
-        const res = await fetch(`/api/v1/admin/calendar?${sp.toString()}`, {
-          method: "GET",
-          cache: "no-store",
-          signal: ac.signal,
-        });
-        const json = (await res.json()) as ApiEnvelope<{
-          therapistTimezone?: string;
-          items: Array<{
-            therapistId: string;
-            type: "appointment";
-            appointmentId: string;
-            startAt: string;
-            endAt: string;
-            appointmentType: "online" | "in_person";
-            status: string;
-            proofUrl?: string | null;
-          }>;
-          timeBlocks?: Array<{
-            timeBlockId: string;
-            startAt: string;
-            endAt: string;
-            kind: TimeBlockKind;
-            label: string;
-          }>;
-          workingHours?: Array<{
-            dayOfWeek: number;
-            startTime: string;
-            endTime: string;
-            isActive: boolean;
-          }>;
-        }>;
-        if (!res.ok || json.status !== "success" || !json.data) {
-          throw new Error(json.message || `Failed to load calendar (HTTP ${res.status})`);
-        }
-
-        if (json.data.therapistTimezone) {
-          setTimeZone(normalizeTimeZone(json.data.therapistTimezone));
-        }
+        const responses = await Promise.all(
+          ids.map(async (therapistId) => {
+            const sp = new URLSearchParams();
+            sp.set("from", from.toISOString());
+            sp.set("to", to.toISOString());
+            sp.set("therapistId", therapistId);
+            const res = await fetch(`/api/v1/admin/calendar?${sp.toString()}`, {
+              method: "GET",
+              cache: "no-store",
+              signal: ac.signal,
+            });
+            const json = (await res.json()) as ApiEnvelope<CalendarApiData>;
+            if (!res.ok || json.status !== "success" || !json.data) {
+              throw new Error(json.message || `Failed to load calendar (HTTP ${res.status})`);
+            }
+            return { therapistId, data: json.data };
+          }),
+        );
 
         const nextEvents: CalEvent[] = [];
-        for (const it of json.data.items) {
-          if (it.status === "cancelled" || it.status === "expired") continue;
-          const startUtc = parseDbUtcTimestamp(it.startAt);
-          const endUtc = parseDbUtcTimestamp(it.endAt);
-          if (!startUtc || !endUtc) continue;
-          nextEvents.push({
-            id: it.appointmentId,
-            startUtc,
-            endUtc,
-            title: titleForAppointmentType(it.appointmentType),
-            subtitle: it.status,
-            variant: "therapy",
-            proofUrl: it.proofUrl ?? undefined,
-            approvalStatus: approvalStatusForAppointmentStatus(it.status),
-            appointmentStatus: it.status as CalEvent["appointmentStatus"],
-          });
-        }
-
         const nextBlocks: CalTimeBlock[] = [];
-        for (const tb of json.data.timeBlocks ?? []) {
-          const startUtc = parseDbUtcTimestamp(tb.startAt);
-          const endUtc = parseDbUtcTimestamp(tb.endAt);
-          if (!startUtc || !endUtc) continue;
-          nextBlocks.push({
-            id: tb.timeBlockId,
-            startUtc,
-            endUtc,
-            kind: tb.kind,
-            label: tb.label,
-          });
+        let mergedWorkingHours: WorkingHoursSlot[] = [];
+
+        for (const { therapistId, data } of responses) {
+          const therapistName = therapistsById?.[therapistId]?.name;
+          for (const it of data.items) {
+            const startUtc = parseDbUtcTimestamp(it.startAt);
+            const endUtc = parseDbUtcTimestamp(it.endAt);
+            if (!startUtc || !endUtc) continue;
+            nextEvents.push({
+              id: it.appointmentId,
+              therapistId: it.therapistId,
+              therapistName,
+              startUtc,
+              endUtc,
+              title: it.serviceName || titleForAppointmentType(it.appointmentType),
+              customerName: it.clientName,
+              appointmentTypeLine: it.appointmentTypeLine,
+              paymentBadge: it.paymentBadge,
+              appointmentType: it.appointmentType,
+              proofUrl: it.proofUrl ?? undefined,
+              approvalStatus: approvalStatusForAppointmentStatus(it.status),
+              appointmentStatus: it.status as CalEvent["appointmentStatus"],
+            });
+          }
+
+          for (const tb of data.timeBlocks ?? []) {
+            const startUtc = parseDbUtcTimestamp(tb.startAt);
+            const endUtc = parseDbUtcTimestamp(tb.endAt);
+            if (!startUtc || !endUtc) continue;
+            nextBlocks.push({
+              id: `${therapistId}:${tb.timeBlockId}`,
+              startUtc,
+              endUtc,
+              kind: tb.kind,
+              label: tb.label,
+            });
+          }
         }
 
-        setEvents(nextEvents);
-        setTimeBlocks(nextBlocks);
-        setWorkingHours(
-          (json.data.workingHours ?? []).map((wh) => ({
+        if (ids.length === 1) {
+          const single = responses[0]?.data;
+          if (single?.therapistTimezone) {
+            setTimeZone(normalizeTimeZone(single.therapistTimezone));
+          }
+          mergedWorkingHours = (single?.workingHours ?? []).map((wh) => ({
             dayOfWeek: wh.dayOfWeek,
             startTime: wh.startTime,
             endTime: wh.endTime,
             isActive: wh.isActive,
-          })),
-        );
+          }));
+        }
+
+        setEvents(nextEvents);
+        setTimeBlocks(nextBlocks);
+        setWorkingHours(mergedWorkingHours);
       } catch (e) {
         if ((e as any)?.name === "AbortError") return;
         setErrorMsg(e instanceof Error ? e.message : "Failed to load calendar");
@@ -420,7 +537,7 @@ export default function AdminCalendarHome({
     })();
 
     return () => ac.abort();
-  }, [anchor, therapistId, timeZone, view, weekStartYmd, reloadKey]);
+  }, [anchor, therapistIdsKey, therapistsById, timeZone, view, weekStartYmd, reloadKey]);
 
   const todayYmd = useMemo(() => getYMDInTimeZone(new Date(), timeZone), [timeZone]);
 
@@ -495,8 +612,8 @@ export default function AdminCalendarHome({
 
   const copyBookingPageUrl = useCallback(async () => {
     const origin = window.location.origin;
-    const url = therapistId
-      ? `${origin}/book?therapist=${encodeURIComponent(therapistId)}`
+    const url = primaryTherapistId
+      ? `${origin}/book?therapist=${encodeURIComponent(primaryTherapistId)}`
       : `${origin}/book`;
     try {
       await navigator.clipboard.writeText(url);
@@ -505,7 +622,7 @@ export default function AdminCalendarHome({
     } catch {
       setShareCopied(false);
     }
-  }, [therapistId]);
+  }, [primaryTherapistId]);
 
   const gridColsClass = view === "day" ? "grid-cols-[80px_1fr]" : "grid-cols-[80px_repeat(7,1fr)]";
   const showTeamReopen = !teamPanelOpen && Boolean(onOpenTeamPanel);
@@ -518,7 +635,7 @@ export default function AdminCalendarHome({
           setCreateOpen(false);
           setCreateInitialSchedule(null);
         }}
-        therapistId={therapistId}
+        therapistId={primaryTherapistId}
         therapistTimezone={timeZone}
         initialSchedule={createInitialSchedule}
         blockedTimeBlocks={timeBlocks.map((tb) => ({
@@ -607,17 +724,21 @@ export default function AdminCalendarHome({
           onSave={(next) => {
             setSelected(next);
             setEvents((prev) =>
-              prev.map((e) =>
-                e.id === next.sessionId
-                  ? {
-                      ...e,
-                      title: next.title,
-                      subtitle: next.providerName,
-                      proofUrl: next.proofUrl,
-                      approvalStatus: next.approvalStatus,
-                    }
-                  : e,
-              ),
+              prev.map((e) => {
+                if (e.id !== next.sessionId) return e;
+                return {
+                  ...e,
+                  title: next.title,
+                  customerName: e.customerName,
+                  appointmentTypeLine: e.appointmentTypeLine,
+                  paymentBadge: calendarPaymentBadge(next.appointmentStatus ?? e.appointmentStatus ?? "pending_payment"),
+                  therapistId: next.therapistId ?? e.therapistId,
+                  therapistName: next.therapistName ?? e.therapistName,
+                  proofUrl: next.proofUrl,
+                  approvalStatus: next.approvalStatus,
+                  appointmentStatus: next.appointmentStatus,
+                };
+              }),
             );
             setReloadKey((k) => k + 1);
           }}
@@ -1066,7 +1187,8 @@ export default function AdminCalendarHome({
                           dateLine: `${dateLine}, ${dow}`,
                           timeRange,
                           title: ev.title,
-                          providerName: ev.subtitle,
+                          therapistId: ev.therapistId,
+                          therapistName: ev.therapistName,
                           notes: "",
                           videoLink: "",
                           proofUrl: ev.proofUrl,
@@ -1074,6 +1196,7 @@ export default function AdminCalendarHome({
                           appointmentStatus: ev.appointmentStatus,
                           startAt: ev.startUtc.toISOString(),
                           endAt: ev.endUtc.toISOString(),
+                          appointmentType: ev.appointmentType,
                         });
                         setEditOpen(true);
                       }}
@@ -1191,8 +1314,14 @@ function TimeRow({
             {blockSegments.map((seg, idx) => (
               <TimeBlockOverlay key={`${colDate.toISOString()}-${hour}-block-${idx}`} segment={seg} />
             ))}
-            {cellEvents.map((ev) => (
-              <EventBlock key={ev.id} ev={ev} onClick={() => onSelectEvent(ev)} />
+            {layoutCellEvents(cellEvents).map(({ ev, column, columnCount }) => (
+              <EventBlock
+                key={`${ev.therapistId}:${ev.id}`}
+                ev={ev}
+                column={column}
+                columnCount={columnCount}
+                onClick={() => onSelectEvent(ev)}
+              />
             ))}
           </div>
         );
@@ -1236,24 +1365,21 @@ function TimeBlockOverlay({
   );
 }
 
-function EventBlock({ ev, onClick }: { ev: CalEvent; onClick: () => void }) {
-  if (ev.variant === "therapy") {
-    return (
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onClick();
-        }}
-        className="absolute inset-x-1 top-1 bottom-1 z-10 cursor-pointer overflow-hidden border-l-4 border-[#2d6a4f] bg-[#cbede1] p-2 text-left shadow-sm hover:brightness-[0.98] active:scale-[0.995] transition"
-        aria-label={`Edit appointment: ${ev.title}`}
-      >
-        <p className="text-[0.65rem] font-bold leading-tight text-[#1d5c42]">{ev.title}</p>
-        <p className="text-[0.6rem] text-[#1d5c42]/80">{ev.subtitle}</p>
-      </button>
-    );
-  }
-  const h = ev.durationMin ? Math.max(80, (ev.durationMin / 60) * 80) : 150;
+function EventBlock({
+  ev,
+  onClick,
+  column = 0,
+  columnCount = 1,
+}: {
+  ev: CalEvent;
+  onClick: () => void;
+  column?: number;
+  columnCount?: number;
+}) {
+  const styles = CAL_EVENT_BLOCK_STYLES[calendarEventAppearance(ev)];
+  const widthPct = 100 / columnCount;
+  const leftPct = column * widthPct;
+
   return (
     <button
       type="button"
@@ -1261,12 +1387,25 @@ function EventBlock({ ev, onClick }: { ev: CalEvent; onClick: () => void }) {
         e.stopPropagation();
         onClick();
       }}
-      className="absolute inset-x-1 top-1 z-10 cursor-pointer overflow-hidden border-l-4 border-slate-400 bg-slate-100 p-2 text-left shadow-sm hover:bg-slate-200/70 active:scale-[0.995] transition"
-      style={{ height: `${h}px` }}
-      aria-label={`Edit appointment: ${ev.title}`}
+      className={cx(
+        "absolute top-1 bottom-1 z-10 flex cursor-pointer flex-col overflow-hidden p-1.5 text-left transition active:scale-[0.995]",
+        styles.container,
+      )}
+      style={{
+        left: `calc(${leftPct}% + 4px)`,
+        width: `calc(${widthPct}% - 8px)`,
+      }}
+      aria-label={`Edit appointment: ${ev.customerName}`}
     >
-      <p className="text-[0.65rem] font-bold leading-tight text-slate-700">{ev.title}</p>
-      <p className="text-[0.6rem] text-slate-500">{ev.subtitle}</p>
+      <p className={cx("truncate text-[0.65rem] font-bold leading-tight", styles.title)}>
+        {ev.customerName}
+      </p>
+      <p className={cx("mt-0.5 truncate text-[0.6rem] leading-tight", styles.subtitle)}>
+        {ev.appointmentTypeLine}
+      </p>
+      <span className="mt-auto self-end rounded-full bg-white px-1.5 py-0.5 text-[0.55rem] font-semibold leading-none text-mgmt-on-surface shadow-sm">
+        {ev.paymentBadge}
+      </span>
     </button>
   );
 }

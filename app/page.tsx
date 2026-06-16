@@ -5,7 +5,7 @@ import TherapistsSection from "@/components/landing/TherapistsSection";
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-col font-sans">
-      <header className="bg-cafs-black border-b border-dark-border py-3 px-4 sm:py-4 sm:px-6 sticky top-0 z-50">
+      <header className="bg-cafs-black border-b border-dark-border py-2 px-4 sm:py-4 sm:px-6 sticky top-0 z-50">
         <nav className="max-w-7xl mx-auto flex flex-nowrap items-center justify-between gap-2 sm:gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-8">
             <a href="#" className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">

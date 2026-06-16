@@ -233,7 +233,7 @@ export default function AdminCustomersHome() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-mgmt-on-surface">{c.fullName}</p>
-                    <p className="truncate text-xs text-mgmt-on-surface-variant">{c.email}</p>
+                    {/* <p className="truncate text-xs text-mgmt-on-surface-variant">{c.email}</p> */}
                   </div>
                 </button>
               );

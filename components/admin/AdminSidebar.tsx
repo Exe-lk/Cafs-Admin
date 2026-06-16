@@ -53,13 +53,13 @@ const NAV_ENTRIES: NavEntry[] = [
   { kind: "link", href: "/admin/service-types", label: "Service Categories", icon: "bookmarks" },
   { kind: "link", href: "/admin/services", label: "Services", icon: "format_list_bulleted" },
   { kind: "link", href: "/admin/customers", label: "Customers", icon: "sentiment_satisfied" },
-  { kind: "link", href: "/admin/theraphist", label: "Theraphist", icon: "stethoscope" },
+  { kind: "link", href: "/admin/theraphist", label: "Therapists", icon: "stethoscope" },
   { kind: "link", href: "/admin/settings", label: "Settings", icon: "settings" },
 ];
 
 const NAV_ICON_SIZE = 18;
 const NAV_CHILD_ICON_SIZE = 18;
-const SIDEBAR_CONTROL_ICON_SIZE = 18;
+const SIDEBAR_CONTROL_ICON_SIZE = 25;
 
 const NAV_ITEM_LABEL = "text-sm font-semibold text-mgmt-on-surface";
 const NAV_CHILD_LABEL = "text-sm font-semibold text-mgmt-on-surface-variant";
@@ -211,7 +211,7 @@ export default function AdminSidebar({
           <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 bg-white">
             <Image
               src="/cafs-logo.png"
-              alt="CAFS"
+              alt="Child Adolescent and Family Services"
               width={36}
               height={36}
               className="h-full w-full object-cover"
@@ -220,38 +220,34 @@ export default function AdminSidebar({
           </div>
         </div>
       ) : (
-        <div className="mb-10 flex items-start justify-between gap-3 px-2">
+        <div className="mb-10 flex items-center gap-2.5 px-2">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 bg-white">
             <Image
               src="/cafs-logo.png"
-              alt="CAFS"
+              alt="Child Adolescent and Family Services"
               width={40}
               height={40}
               className="h-full w-full object-cover"
               priority
             />
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h1 className="text-xl font-bold leading-none text-slate-900">CAFS</h1>
-                <p className="mt-1 text-[0.65rem] font-medium uppercase tracking-[0.1em] text-slate-600">
-                  Admin
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                {onToggleCollapse ? (
-                  <button
-                    type="button"
-                    onClick={onToggleCollapse}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                    aria-label="Collapse menu"
-                  >
-                    <MaterialSymbol name="chevron_left" size={SIDEBAR_CONTROL_ICON_SIZE} />
-                  </button>
-                ) : null}
-                {headerRight ? <div className="shrink-0">{headerRight}</div> : null}
-              </div>
+          <div className="flex min-w-0 flex-1 items-center gap-0">
+            <h1 className="min-w-0 flex-1 text-[12px] font-semibold leading-snug text-slate-900">
+              <span className="block">Child Adolescent and</span>
+              <span className="block">Family Services</span>
+            </h1>
+            <div className="flex shrink-0 items-center">
+              {onToggleCollapse ? (
+                <button
+                  type="button"
+                  onClick={onToggleCollapse}
+                  className="pl-4  inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  aria-label="Collapse menu"
+                >
+                  <MaterialSymbol name="chevron_left" size={SIDEBAR_CONTROL_ICON_SIZE} />
+                </button>
+              ) : null}
+              {headerRight ? <div className="shrink-0">{headerRight}</div> : null}
             </div>
           </div>
         </div>

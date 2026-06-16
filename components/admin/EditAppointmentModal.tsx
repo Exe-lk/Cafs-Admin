@@ -3,6 +3,11 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import AppointmentHistoryPanel from "@/components/admin/AppointmentHistoryPanel";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import { useAdminTherapists } from "@/components/admin/useAdminTherapists";
+import {
+  approvalStatusForAppointmentStatus,
+  type DbAppointmentStatus,
+} from "@/lib/calendar/appointmentStatus";
 import {
   isAppointmentStartInPast,
   minBookableDateInputInTimeZone,
@@ -26,7 +31,10 @@ export type AdminEditableAppointment = {
   dateLine: string;
   timeRange: string;
   title: string;
-  providerName: string;
+  /** @deprecated Use therapistName — kept for legacy customer detail mock data */
+  providerName?: string;
+  therapistId?: string;
+  therapistName?: string;
   providerAvatarUrl?: string | null;
   videoLink?: string;
   notes?: string;
@@ -48,6 +56,24 @@ export type AdminEditableAppointment = {
 };
 
 const MIN_REJECT_REASON_LEN = 3;
+
+const FIELD_SELECT_CLASS =
+  "mt-1 h-10 w-full appearance-none rounded-lg border border-mgmt-outline-variant/20 bg-mgmt-surface-container-low py-2 pl-3 pr-9 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90";
+
+const EDIT_APPOINTMENT_STATUS_OPTIONS: Array<{ value: DbAppointmentStatus; label: string }> = [
+  { value: "pending_payment", label: "Awaiting payment" },
+  { value: "pending_confirmation", label: "Awaiting confirmation" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "completed", label: "Completed" },
+  { value: "no_show", label: "No show" },
+  { value: "expired", label: "Expired" },
+];
+
+export function appointmentStatusLabel(status?: string): string {
+  const match = EDIT_APPOINTMENT_STATUS_OPTIONS.find((o) => o.value === status);
+  return match?.label ?? status?.replaceAll("_", " ") ?? "";
+}
 
 type TabKey = "details" | "history";
 
@@ -88,6 +114,7 @@ export default function EditAppointmentModal({
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("details");
   const [historyReloadKey, setHistoryReloadKey] = useState(0);
+  const { therapists, loading: therapistsLoading } = useAdminTherapists();
 
   const isApiBacked = Boolean(appointment.startAt && appointment.endAt);
   const busy = submitting || rejectSubmitting;
@@ -195,13 +222,37 @@ export default function EditAppointmentModal({
   }
 
   const canSave = useMemo(() => {
-    return Boolean(
-      draft.title.trim() &&
-        draft.providerName.trim() &&
-        draft.dateLine.trim() &&
-        draft.timeRange.trim(),
+    const hasBasics = Boolean(
+      draft.title.trim() && draft.dateLine.trim() && draft.timeRange.trim(),
     );
-  }, [draft.dateLine, draft.providerName, draft.timeRange, draft.title]);
+    if (!hasBasics) return false;
+    if (isApiBacked) {
+      return Boolean(draft.therapistId && draft.appointmentStatus);
+    }
+    return true;
+  }, [
+    draft.appointmentStatus,
+    draft.dateLine,
+    draft.therapistId,
+    draft.timeRange,
+    draft.title,
+    isApiBacked,
+  ]);
+
+  const therapistOptions = useMemo(() => {
+    const opts = therapists.map((t) => ({ id: t.id, name: t.name }));
+    if (
+      draft.therapistId &&
+      !opts.some((o) => o.id === draft.therapistId) &&
+      (draft.therapistName || draft.providerName)
+    ) {
+      opts.unshift({
+        id: draft.therapistId,
+        name: draft.therapistName ?? draft.providerName ?? "Therapist",
+      });
+    }
+    return opts;
+  }, [draft.providerName, draft.therapistId, draft.therapistName, therapists]);
 
   const approvalLabel =
     draft.approvalStatus === "accepted"
@@ -329,7 +380,7 @@ export default function EditAppointmentModal({
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
+              <div>
                 <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
                   Title
                 </label>
@@ -345,16 +396,68 @@ export default function EditAppointmentModal({
 
               <div>
                 <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
-                  Provider name
+                  Therapists
                 </label>
-                <input
-                  value={draft.providerName}
-                  readOnly={readOnly}
-                  disabled={readOnly}
-                  onChange={(e) => setDraft((p) => ({ ...p, providerName: e.target.value }))}
-                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
-                  placeholder="Provider…"
-                />
+                <div className="relative">
+                  <select
+                    value={draft.therapistId ?? ""}
+                    disabled={readOnly || therapistsLoading}
+                    onChange={(e) => {
+                      const therapistId = e.target.value;
+                      const therapistName =
+                        therapistOptions.find((t) => t.id === therapistId)?.name ?? "";
+                      setDraft((p) => ({ ...p, therapistId, therapistName }));
+                    }}
+                    className={FIELD_SELECT_CLASS}
+                  >
+                    <option value="" disabled>
+                      {therapistsLoading ? "Loading therapists…" : "Select therapist…"}
+                    </option>
+                    {therapistOptions.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                  <MaterialSymbol
+                    name="expand_more"
+                    className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[20px] text-mgmt-on-surface-variant"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
+                  Appointment state
+                </label>
+                <div className="relative">
+                  <select
+                    value={draft.appointmentStatus ?? ""}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      const appointmentStatus = e.target.value as DbAppointmentStatus;
+                      setDraft((p) => ({
+                        ...p,
+                        appointmentStatus,
+                        approvalStatus: approvalStatusForAppointmentStatus(appointmentStatus),
+                      }));
+                    }}
+                    className={FIELD_SELECT_CLASS}
+                  >
+                    <option value="" disabled>
+                      Select state…
+                    </option>
+                    {EDIT_APPOINTMENT_STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <MaterialSymbol
+                    name="expand_more"
+                    className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[20px] text-mgmt-on-surface-variant"
+                  />
+                </div>
               </div>
 
               <div>
@@ -602,6 +705,12 @@ export default function EditAppointmentModal({
                           status: draft.appointmentStatus ?? appointment.appointmentStatus,
                           note: draft.notes ?? "",
                         };
+                        if (
+                          draft.therapistId &&
+                          draft.therapistId !== appointment.therapistId
+                        ) {
+                          body.therapistId = draft.therapistId;
+                        }
                         if (hasTimeChange) {
                           const scheduleCheck = validateAppointmentSchedule({
                             startUtc: new Date(nextStartAt),

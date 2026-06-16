@@ -4,6 +4,10 @@ import { getAuthContext, requireRoleService } from "@/lib/api/auth";
 import { parseIsoDateParam } from "@/lib/api/http";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { resolveBankSlipProofUrl } from "@/lib/calendar/bankSlipProof";
+import {
+  calendarAppointmentTypeLine,
+  calendarPaymentBadge,
+} from "@/lib/calendar/calendarEventDisplay";
 import { parseTimeBlockKindAndLabel } from "@/lib/calendar/timeBlocks";
 import { timeToHHMM, type WorkingHoursSlot } from "@/lib/calendar/workingHours";
 import { formatDbUtcTimestamp, normalizeTimeZone, parseDbUtcTimestamp } from "@/lib/timezone";
@@ -15,17 +19,38 @@ type AppointmentRow = {
   end_at: string;
   appointment_type: "online" | "in_person";
   status: string;
+  client:
+    | { full_name?: string | null }
+    | Array<{ full_name?: string | null }>
+    | null;
+  service:
+    | { name?: string | null }
+    | Array<{ name?: string | null }>
+    | null;
   payments:
     | {
         method?: "gateway" | "bank_transfer" | "cash";
+        status?: string | null;
+        paid_at?: string | null;
         provider_payload?: string | null;
       }
     | Array<{
         method?: "gateway" | "bank_transfer" | "cash";
+        status?: string | null;
+        paid_at?: string | null;
         provider_payload?: string | null;
       }>
     | null;
 };
+
+function firstOrSelf<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+function str(value: unknown): string {
+  return typeof value === "string" ? value : value == null ? "" : String(value);
+}
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthContext(request);
@@ -46,7 +71,17 @@ export async function GET(request: NextRequest) {
   let q = adminSupabase
     .from("appointments")
     .select(
-      "appointment_id,therapist_id,start_at,end_at,appointment_type,status,payments(method,provider_payload)",
+      `
+      appointment_id,
+      therapist_id,
+      start_at,
+      end_at,
+      appointment_type,
+      status,
+      payments(method, status, paid_at, provider_payload),
+      client:profiles!appointments_client_id_fkey(user_id, full_name),
+      service:services!appointments_service_id_fkey(service_id, name)
+    `,
     )
     .order("start_at", { ascending: true });
 
@@ -64,6 +99,13 @@ export async function GET(request: NextRequest) {
       const proofUrl = await resolveBankSlipProofUrl(adminSupabase, a);
       const startUtc = parseDbUtcTimestamp(a.start_at);
       const endUtc = parseDbUtcTimestamp(a.end_at);
+      const client = firstOrSelf(a.client);
+      const service = firstOrSelf(a.service);
+      const payment = firstOrSelf(a.payments);
+      const clientName = str(client?.full_name).trim() || "Customer";
+      const serviceName = str(service?.name).trim();
+      const appointmentTypeLine = calendarAppointmentTypeLine(a.appointment_type, serviceName);
+      const paymentBadge = calendarPaymentBadge(a.status, payment);
       return {
         therapistId: a.therapist_id,
         type: "appointment" as const,
@@ -72,6 +114,10 @@ export async function GET(request: NextRequest) {
         endAt: endUtc ? formatDbUtcTimestamp(endUtc) : a.end_at,
         appointmentType: a.appointment_type,
         status: a.status,
+        clientName,
+        serviceName,
+        appointmentTypeLine,
+        paymentBadge,
         proofUrl,
       };
     }),
