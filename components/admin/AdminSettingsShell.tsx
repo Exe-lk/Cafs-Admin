@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import AdminSettingsSubNav from "@/components/admin/AdminSettingsSubNav";
+import { adminSidebarInsetLeft } from "@/components/admin/adminSidebarLayout";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 
 function cx(...classes: Array<string | false | null | undefined>) {
@@ -30,7 +31,10 @@ export default function AdminSettingsShell({ children }: { children: ReactNode }
     <div className="flex h-full min-h-0 flex-1">
       {/* Desktop: fixed column so it never moves when the main pane (or window) scrolls */}
       <div
-        className="hidden overflow-y-auto bg-mgmt-surface-container-lowest md:fixed md:left-64 md:top-0 md:z-40 md:flex md:h-dvh md:w-72 md:flex-col"
+        className={cx(
+          "hidden overflow-y-auto bg-mgmt-surface-container-lowest md:fixed md:top-0 md:z-40 md:flex md:h-dvh md:w-72 md:flex-col",
+          adminSidebarInsetLeft("md"),
+        )}
         data-purpose="settings-subnav-fixed"
       >
         <AdminSettingsSubNav />

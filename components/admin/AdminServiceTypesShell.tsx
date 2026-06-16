@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import ServiceTypesSubNav from "@/components/admin/ServiceTypesSubNav";
+import { adminSidebarInsetLeft } from "@/components/admin/adminSidebarLayout";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 
 function cx(...classes: Array<string | false | null | undefined>) {
@@ -28,7 +29,10 @@ export default function AdminServiceTypesShell({ children }: { children: ReactNo
   return (
     <div className="flex h-full min-h-0 flex-1">
       <div
-        className="hidden overflow-y-auto bg-mgmt-surface-container-lowest md:fixed md:left-64 md:top-0 md:z-40 md:flex md:h-dvh md:w-72 md:flex-col"
+        className={cx(
+          "hidden overflow-y-auto bg-mgmt-surface-container-lowest md:fixed md:top-0 md:z-40 md:flex md:h-dvh md:w-72 md:flex-col",
+          adminSidebarInsetLeft("md"),
+        )}
         data-purpose="service-types-subnav-fixed"
       >
         <ServiceTypesSubNav />

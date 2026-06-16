@@ -1,5 +1,6 @@
 "use client";
 import EditServiceModal from "@/components/admin/EditServiceModal";
+import ListItemActionsMenu from "@/components/admin/ListItemActionsMenu";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type ServiceItem = {
@@ -48,16 +49,6 @@ function LinkIcon({ className }: { className?: string }) {
   );
 }
 
-function MoreVerticalIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden>
-      <circle cx="12" cy="5" r="1.5" />
-      <circle cx="12" cy="12" r="1.5" />
-      <circle cx="12" cy="19" r="1.5" />
-    </svg>
-  );
-}
-
 type ServiceModalState = "closed" | "create" | ServiceItem;
 
 export default function AdminServicesDashboard() {
@@ -67,6 +58,8 @@ export default function AdminServicesDashboard() {
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [actionsMenuId, setActionsMenuId] = useState<string | null>(null);
+  const [hiddenById, setHiddenById] = useState<Record<string, boolean>>({});
 
   const copyLink = useCallback(async (id: string, slug: string) => {
     const url = `${typeof window !== "undefined" ? window.location.origin : ""}/book/${slug}`;
@@ -240,13 +233,25 @@ export default function AdminServicesDashboard() {
               >
                 <LinkIcon className="h-4 w-4" />
               </button>
-              <button
-                type="button"
-                className="rounded-lg p-1.5 text-mgmt-on-surface-variant hover:text-mgmt-on-surface"
-                aria-label={`More actions for ${service.title}`}
-              >
-                <MoreVerticalIcon className="h-4 w-4" />
-              </button>
+              <ListItemActionsMenu
+                itemLabel={service.title}
+                open={actionsMenuId === service.id}
+                onOpenChange={(open) => setActionsMenuId(open ? service.id : null)}
+                hidden={Boolean(hiddenById[service.id])}
+                onEdit={() => setServiceModal(service)}
+                onHiddenChange={(hidden) =>
+                  setHiddenById((prev) => ({ ...prev, [service.id]: hidden }))
+                }
+                onDelete={() => {
+                  if (!window.confirm(`Delete "${service.title}"?`)) return;
+                  setServices((prev) => prev.filter((s) => s.id !== service.id));
+                  setHiddenById((prev) => {
+                    const next = { ...prev };
+                    delete next[service.id];
+                    return next;
+                  });
+                }}
+              />
             </div>
           </div>
         ))}

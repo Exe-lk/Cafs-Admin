@@ -2,7 +2,17 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 import AppointmentHistoryPanel from "@/components/admin/AppointmentHistoryPanel";
+import BankSlipUploadFields, {
+  hasBankSlipUploadIntent,
+  submitBankSlipTransfer,
+  validateBankSlipFields,
+} from "@/components/admin/BankSlipUploadFields";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import { useAdminTherapists } from "@/components/admin/useAdminTherapists";
+import {
+  approvalStatusForAppointmentStatus,
+  type DbAppointmentStatus,
+} from "@/lib/calendar/appointmentStatus";
 import {
   isAppointmentStartInPast,
   minBookableDateInputInTimeZone,
@@ -26,7 +36,10 @@ export type AdminEditableAppointment = {
   dateLine: string;
   timeRange: string;
   title: string;
-  providerName: string;
+  /** @deprecated Use therapistName — kept for legacy customer detail mock data */
+  providerName?: string;
+  therapistId?: string;
+  therapistName?: string;
   providerAvatarUrl?: string | null;
   videoLink?: string;
   notes?: string;
@@ -49,11 +62,30 @@ export type AdminEditableAppointment = {
 
 const MIN_REJECT_REASON_LEN = 3;
 
+const FIELD_SELECT_CLASS =
+  "mt-1 h-10 w-full appearance-none rounded-lg border border-mgmt-outline-variant/20 bg-mgmt-surface-container-low py-2 pl-3 pr-9 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90";
+
+const EDIT_APPOINTMENT_STATUS_OPTIONS: Array<{ value: DbAppointmentStatus; label: string }> = [
+  { value: "pending_payment", label: "Awaiting payment" },
+  { value: "pending_confirmation", label: "Awaiting confirmation" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "completed", label: "Completed" },
+  { value: "no_show", label: "No show" },
+  { value: "expired", label: "Expired" },
+];
+
+export function appointmentStatusLabel(status?: string): string {
+  const match = EDIT_APPOINTMENT_STATUS_OPTIONS.find((o) => o.value === status);
+  return match?.label ?? status?.replaceAll("_", " ") ?? "";
+}
+
 type TabKey = "details" | "history";
 
 export default function EditAppointmentModal({
   appointment,
   therapistTimezone,
+  readOnly = false,
   onClose,
   onSave,
   onDelete,
@@ -61,6 +93,7 @@ export default function EditAppointmentModal({
 }: {
   appointment: AdminEditableAppointment;
   therapistTimezone?: string;
+  readOnly?: boolean;
   onClose: () => void;
   onSave: (next: AdminEditableAppointment) => void;
   onDelete: (args: { dayId: string; sessionId: string }) => void;
@@ -86,6 +119,10 @@ export default function EditAppointmentModal({
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("details");
   const [historyReloadKey, setHistoryReloadKey] = useState(0);
+  const [bankReference, setBankReference] = useState("");
+  const [bankSlipUrl, setBankSlipUrl] = useState("");
+  const [bankSlipFile, setBankSlipFile] = useState<File | null>(null);
+  const { therapists, loading: therapistsLoading } = useAdminTherapists();
 
   const isApiBacked = Boolean(appointment.startAt && appointment.endAt);
   const busy = submitting || rejectSubmitting;
@@ -127,6 +164,9 @@ export default function EditAppointmentModal({
     setRejectError(null);
     setTab("details");
     setHistoryReloadKey(0);
+    setBankReference("");
+    setBankSlipUrl("");
+    setBankSlipFile(null);
   }, [appointment]);
 
   const canConfirmReject =
@@ -193,13 +233,37 @@ export default function EditAppointmentModal({
   }
 
   const canSave = useMemo(() => {
-    return Boolean(
-      draft.title.trim() &&
-        draft.providerName.trim() &&
-        draft.dateLine.trim() &&
-        draft.timeRange.trim(),
+    const hasBasics = Boolean(
+      draft.title.trim() && draft.dateLine.trim() && draft.timeRange.trim(),
     );
-  }, [draft.dateLine, draft.providerName, draft.timeRange, draft.title]);
+    if (!hasBasics) return false;
+    if (isApiBacked) {
+      return Boolean(draft.therapistId && draft.appointmentStatus);
+    }
+    return true;
+  }, [
+    draft.appointmentStatus,
+    draft.dateLine,
+    draft.therapistId,
+    draft.timeRange,
+    draft.title,
+    isApiBacked,
+  ]);
+
+  const therapistOptions = useMemo(() => {
+    const opts = therapists.map((t) => ({ id: t.id, name: t.name }));
+    if (
+      draft.therapistId &&
+      !opts.some((o) => o.id === draft.therapistId) &&
+      (draft.therapistName || draft.providerName)
+    ) {
+      opts.unshift({
+        id: draft.therapistId,
+        name: draft.therapistName ?? draft.providerName ?? "Therapist",
+      });
+    }
+    return opts;
+  }, [draft.providerName, draft.therapistId, draft.therapistName, therapists]);
 
   const approvalLabel =
     draft.approvalStatus === "accepted"
@@ -208,6 +272,10 @@ export default function EditAppointmentModal({
         ? "Rejected"
         : "Pending";
   const showApprovalActions =
+    !readOnly &&
+    (draft.appointmentStatus === "pending_payment" ||
+      draft.appointmentStatus === "pending_confirmation");
+  const showBankSlipSection =
     draft.appointmentStatus === "pending_payment" ||
     draft.appointmentStatus === "pending_confirmation";
 
@@ -249,7 +317,7 @@ export default function EditAppointmentModal({
         >
           <div className="flex items-center justify-between px-6 pt-5 pb-3">
             <h3 id={titleId} className="text-lg font-semibold text-mgmt-on-surface">
-              Edit appointment
+              {readOnly ? "View appointment" : "Edit appointment"}
             </h3>
             <button
               type="button"
@@ -326,28 +394,84 @@ export default function EditAppointmentModal({
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
+              <div>
                 <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
                   Title
                 </label>
                 <input
                   value={draft.title}
+                  readOnly={readOnly}
+                  disabled={readOnly}
                   onChange={(e) => setDraft((p) => ({ ...p, title: e.target.value }))}
-                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="Appointment title…"
                 />
               </div>
 
               <div>
                 <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
-                  Provider name
+                  Therapists
                 </label>
-                <input
-                  value={draft.providerName}
-                  onChange={(e) => setDraft((p) => ({ ...p, providerName: e.target.value }))}
-                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
-                  placeholder="Provider…"
-                />
+                <div className="relative">
+                  <select
+                    value={draft.therapistId ?? ""}
+                    disabled={readOnly || therapistsLoading}
+                    onChange={(e) => {
+                      const therapistId = e.target.value;
+                      const therapistName =
+                        therapistOptions.find((t) => t.id === therapistId)?.name ?? "";
+                      setDraft((p) => ({ ...p, therapistId, therapistName }));
+                    }}
+                    className={FIELD_SELECT_CLASS}
+                  >
+                    <option value="" disabled>
+                      {therapistsLoading ? "Loading therapists…" : "Select therapist…"}
+                    </option>
+                    {therapistOptions.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                  <MaterialSymbol
+                    name="expand_more"
+                    className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[20px] text-mgmt-on-surface-variant"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
+                  Appointment state
+                </label>
+                <div className="relative">
+                  <select
+                    value={draft.appointmentStatus ?? ""}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      const appointmentStatus = e.target.value as DbAppointmentStatus;
+                      setDraft((p) => ({
+                        ...p,
+                        appointmentStatus,
+                        approvalStatus: approvalStatusForAppointmentStatus(appointmentStatus),
+                      }));
+                    }}
+                    className={FIELD_SELECT_CLASS}
+                  >
+                    <option value="" disabled>
+                      Select state…
+                    </option>
+                    {EDIT_APPOINTMENT_STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <MaterialSymbol
+                    name="expand_more"
+                    className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[20px] text-mgmt-on-surface-variant"
+                  />
+                </div>
               </div>
 
               <div>
@@ -356,8 +480,10 @@ export default function EditAppointmentModal({
                 </label>
                 <input
                   value={draft.timeRange}
+                  readOnly={readOnly}
+                  disabled={readOnly}
                   onChange={(e) => setDraft((p) => ({ ...p, timeRange: e.target.value }))}
-                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="e.g. 2:00PM – 3:00PM"
                 />
               </div>
@@ -368,8 +494,10 @@ export default function EditAppointmentModal({
                 </label>
                 <input
                   value={draft.dateLine}
+                  readOnly={readOnly}
+                  disabled={readOnly}
                   onChange={(e) => setDraft((p) => ({ ...p, dateLine: e.target.value }))}
-                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="e.g. 6 JAN, TUE"
                 />
               </div>
@@ -380,42 +508,52 @@ export default function EditAppointmentModal({
                 </label>
                 <input
                   value={draft.videoLink ?? ""}
+                  readOnly={readOnly}
+                  disabled={readOnly}
                   onChange={(e) => setDraft((p) => ({ ...p, videoLink: e.target.value }))}
-                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                  className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="Paste meeting URL…"
                 />
               </div>
 
-              <div className="sm:col-span-2">
-                <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
-                  Proof link (optional)
-                </label>
-                <div className="mt-1 flex items-center gap-2">
-                  <input
-                    value={draft.proofUrl ?? ""}
-                    onChange={(e) => setDraft((p) => ({ ...p, proofUrl: e.target.value }))}
-                    className="w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
-                    placeholder="Paste proof URL…"
-                  />
-                  <a
-                    href={draft.proofUrl || undefined}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-disabled={!draft.proofUrl}
-                    className={cx(
-                      "shrink-0 rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wider transition-colors",
-                      draft.proofUrl
-                        ? "bg-mgmt-primary text-mgmt-on-primary transition-opacity hover:opacity-90"
-                        : "cursor-not-allowed bg-mgmt-outline-variant/10 text-mgmt-on-surface-variant/60",
-                    )}
-                    onClick={(e) => {
-                      if (!draft.proofUrl) e.preventDefault();
-                    }}
-                  >
-                    View proof
-                  </a>
+              {showBankSlipSection ? (
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
+                    Bank slip {readOnly ? "" : "(optional)"}
+                  </label>
+                  <div className="mt-2">
+                    <BankSlipUploadFields
+                      bankReference={bankReference}
+                      onBankReferenceChange={setBankReference}
+                      bankSlipUrl={bankSlipUrl}
+                      onBankSlipUrlChange={setBankSlipUrl}
+                      selectedFile={bankSlipFile}
+                      onFileChange={setBankSlipFile}
+                      disabled={busy}
+                      existingProofUrl={draft.proofUrl}
+                      readOnly={readOnly}
+                    />
+                  </div>
                 </div>
-              </div>
+              ) : draft.proofUrl ? (
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
+                    Bank slip
+                  </label>
+                  <div className="mt-2">
+                    <BankSlipUploadFields
+                      bankReference=""
+                      onBankReferenceChange={() => {}}
+                      bankSlipUrl=""
+                      onBankSlipUrlChange={() => {}}
+                      selectedFile={null}
+                      onFileChange={() => {}}
+                      existingProofUrl={draft.proofUrl}
+                      readOnly
+                    />
+                  </div>
+                </div>
+              ) : null}
 
               <div className="sm:col-span-2">
                 <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
@@ -423,13 +561,16 @@ export default function EditAppointmentModal({
                 </label>
                 <textarea
                   value={draft.notes ?? ""}
+                  readOnly={readOnly}
+                  disabled={readOnly}
                   onChange={(e) => setDraft((p) => ({ ...p, notes: e.target.value }))}
-                  className="mt-1 min-h-24 w-full resize-none rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30"
+                  className="mt-1 min-h-24 w-full resize-none rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="Type notes…"
                 />
               </div>
             </div>
 
+            {!readOnly ? (
             <div className="rounded-xl border border-mgmt-outline-variant/15 bg-white">
               <button
                 type="button"
@@ -499,12 +640,13 @@ export default function EditAppointmentModal({
                 </div>
               ) : null}
             </div>
+            ) : null}
             </>
             ) : null}
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-mgmt-surface-container-low p-4">
-            {tab === "history" ? (
+            {readOnly || tab === "history" ? (
               <div className="flex w-full justify-end">
                 <button
                   type="button"
@@ -568,21 +710,59 @@ export default function EditAppointmentModal({
                 disabled={!canSave || busy}
                 onClick={() => {
                   if (!canSave) return;
+
+                  const bankSlipFields = {
+                    bankReference,
+                    bankSlipUrl,
+                    selectedFile: bankSlipFile,
+                  };
+                  const bankSlipValidationError = validateBankSlipFields(bankSlipFields);
+                  if (bankSlipValidationError) {
+                    setErrorMsg(bankSlipValidationError);
+                    return;
+                  }
+                  const slipIntent = hasBankSlipUploadIntent(bankSlipFields);
+
                   setSubmitting(true);
                   setErrorMsg(null);
                   (async () => {
                     try {
+                      let nextDraft = draft;
+
+                      if (slipIntent && appointment.startAt && appointment.endAt) {
+                        const slipResult = await submitBankSlipTransfer(
+                          appointment.sessionId,
+                          bankSlipFields,
+                        );
+                        if (!slipResult.ok) {
+                          throw new Error(slipResult.message);
+                        }
+                        nextDraft = {
+                          ...draft,
+                          appointmentStatus: "pending_confirmation",
+                          approvalStatus: "pending",
+                        };
+                        setDraft(nextDraft);
+                      }
+
                       // Persist to API when we have ISO times available (i.e. opened from real calendar data).
                       if (appointment.startAt && appointment.endAt) {
-                        const nextStartAt = draft.startAt ?? appointment.startAt;
-                        const nextEndAt = draft.endAt ?? appointment.endAt;
+                        const nextStartAt = nextDraft.startAt ?? appointment.startAt;
+                        const nextEndAt = nextDraft.endAt ?? appointment.endAt;
                         const hasTimeChange =
                           nextStartAt !== appointment.startAt || nextEndAt !== appointment.endAt;
                         const body: Record<string, unknown> = {
-                          appointmentType: draft.appointmentType ?? appointment.appointmentType,
-                          status: draft.appointmentStatus ?? appointment.appointmentStatus,
-                          note: draft.notes ?? "",
+                          appointmentType:
+                            nextDraft.appointmentType ?? appointment.appointmentType,
+                          status: nextDraft.appointmentStatus ?? appointment.appointmentStatus,
+                          note: nextDraft.notes ?? "",
                         };
+                        if (
+                          nextDraft.therapistId &&
+                          nextDraft.therapistId !== appointment.therapistId
+                        ) {
+                          body.therapistId = nextDraft.therapistId;
+                        }
                         if (hasTimeChange) {
                           const scheduleCheck = validateAppointmentSchedule({
                             startUtc: new Date(nextStartAt),
@@ -607,7 +787,7 @@ export default function EditAppointmentModal({
                           throw new Error(json?.message || `Save failed (HTTP ${res.status})`);
                         }
                       }
-                      onSave(draft);
+                      onSave(nextDraft);
                       onClose();
                     } catch (e) {
                       setErrorMsg(e instanceof Error ? e.message : "Failed to save appointment");

@@ -2,6 +2,11 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import BankSlipUploadFields, {
+  hasBankSlipUploadIntent,
+  submitBankSlipTransfer,
+  validateBankSlipFields,
+} from "@/components/admin/BankSlipUploadFields";
 import SearchableSelect from "@/components/admin/SearchableSelect";
 import {
   isAppointmentStartInPast,
@@ -141,6 +146,9 @@ export default function CreateAppointmentModal({
   });
   const [durationMin, setDurationMin] = useState(15);
   const [notes, setNotes] = useState("");
+  const [bankReference, setBankReference] = useState("");
+  const [bankSlipUrl, setBankSlipUrl] = useState("");
+  const [bankSlipFile, setBankSlipFile] = useState<File | null>(null);
 
   const [classId, setClassId] = useState("");
   const [classTitle, setClassTitle] = useState("");
@@ -292,6 +300,9 @@ export default function CreateAppointmentModal({
       setClientId("");
       setAppointmentType("online");
       setNotes("");
+      setBankReference("");
+      setBankSlipUrl("");
+      setBankSlipFile(null);
       setClassId("");
       setClassTitle("");
       setClassTherapistId(therapistId ?? "");
@@ -655,6 +666,29 @@ export default function CreateAppointmentModal({
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Type notes…"
                         className={textareaFieldClass}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <MaterialSymbol name="payments" className="mt-0.5 text-slate-400" />
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-mgmt-on-surface-variant">
+                      Bank slip (optional)
+                    </label>
+                    <p className="mt-1 text-xs text-mgmt-on-surface-variant">
+                      Upload a bank transfer slip now, or leave blank for the client to pay later.
+                    </p>
+                    <div className="mt-3">
+                      <BankSlipUploadFields
+                        bankReference={bankReference}
+                        onBankReferenceChange={setBankReference}
+                        bankSlipUrl={bankSlipUrl}
+                        onBankSlipUrlChange={setBankSlipUrl}
+                        selectedFile={bankSlipFile}
+                        onFileChange={setBankSlipFile}
+                        disabled={submitting}
                       />
                     </div>
                   </div>
@@ -1209,6 +1243,19 @@ export default function CreateAppointmentModal({
                   setErrorMsg(PAST_APPOINTMENT_MESSAGE);
                   return;
                 }
+
+                const bankSlipFields = {
+                  bankReference,
+                  bankSlipUrl,
+                  selectedFile: bankSlipFile,
+                };
+                const bankSlipValidationError = validateBankSlipFields(bankSlipFields);
+                if (bankSlipValidationError) {
+                  setErrorMsg(bankSlipValidationError);
+                  return;
+                }
+                const slipIntent = hasBankSlipUploadIntent(bankSlipFields);
+
                 setSubmitting(true);
                 setErrorMsg(null);
                 try {
@@ -1233,6 +1280,7 @@ export default function CreateAppointmentModal({
                       endAt: end.toISOString(),
                       allowOffHours: offHoursBookingEnabled,
                       note: notes || undefined,
+                      ...(slipIntent ? { payment: { method: "bank_transfer" } } : {}),
                     }),
                   });
                   const json = (await res.json()) as any;
@@ -1241,6 +1289,25 @@ export default function CreateAppointmentModal({
                   }
                   const appointmentId = String(json?.data?.appointmentId ?? "");
                   if (!appointmentId) throw new Error("Create succeeded but no appointmentId returned");
+
+                  if (slipIntent) {
+                    const slipResult = await submitBankSlipTransfer(appointmentId, bankSlipFields);
+                    if (!slipResult.ok) {
+                      onCreated?.({
+                        appointmentId,
+                        therapistId: selectedTherapistId,
+                        startAt: start.toISOString(),
+                        endAt: end.toISOString(),
+                        appointmentType,
+                        emailSent: false,
+                        emailError: undefined,
+                      });
+                      setErrorMsg(
+                        `Appointment created, but bank slip upload failed: ${slipResult.message}. Open the appointment to retry.`,
+                      );
+                      return;
+                    }
+                  }
 
                   onCreated?.({
                     appointmentId,

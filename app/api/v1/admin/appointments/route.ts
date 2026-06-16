@@ -3,6 +3,7 @@ import { created, err } from "@/lib/api/envelope";
 import { getAuthContext, requireRoleService } from "@/lib/api/auth";
 import { newUuid } from "@/lib/api/ids";
 import { parseIsoDateParam } from "@/lib/api/http";
+import { AUDIT_ENTITY_APPOINTMENT, writeAuditLog } from "@/lib/audit/writeAuditLog";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { validateAppointmentSchedule } from "@/lib/calendar/scheduling";
 import {
@@ -196,6 +197,8 @@ export async function POST(request: NextRequest) {
     formatAmountLkr(therapistServiceRow?.price_lkr) ??
     formatAmountLkr(serviceRow?.base_price_lkr);
 
+  const skipPendingPaymentEmail = body.payment?.method === "bank_transfer";
+
   const { paymentInstructionsText, paymentWhatsappNumber } =
     getPaymentInstructionsFromEnv();
 
@@ -203,7 +206,9 @@ export async function POST(request: NextRequest) {
   let emailError: string | undefined;
   let providerMessageId: string | undefined;
 
-  if (!clientEmail) {
+  if (skipPendingPaymentEmail) {
+    emailError = undefined;
+  } else if (!clientEmail) {
     emailError = "Client has no email on file";
   } else {
     const sendResult = await sendAppointmentPendingPaymentEmail({
@@ -248,6 +253,7 @@ export async function POST(request: NextRequest) {
     paymentWhatsappNumber,
   });
 
+  if (!skipPendingPaymentEmail) {
   const { error: outboxError } = await adminSupabase.from("notification_outbox").insert({
     notification_id: newUuid(),
     user_id: clientId,
@@ -267,6 +273,21 @@ export async function POST(request: NextRequest) {
   if (outboxError) {
     console.error("[create appointment] notification_outbox insert failed", outboxError.message);
   }
+  }
+
+  await writeAuditLog(adminSupabase, {
+    actorUserId: auth.ctx.user.id,
+    action: "created",
+    entity: AUDIT_ENTITY_APPOINTMENT,
+    entityId: appointmentId,
+    metadata: {
+      clientId,
+      serviceName:
+        typeof serviceRow?.name === "string" ? serviceRow.name.trim() : null,
+      startAt: startD.toISOString(),
+      status: "pending_payment",
+    },
+  });
 
   const res = created(
     {

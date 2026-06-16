@@ -8,9 +8,16 @@ import EditTherapistProfileModal, {
   type AdminTherapistProfile,
 } from "@/components/admin/EditTherapistProfileModal";
 import { AdminTherapistProvider } from "@/components/admin/AdminTherapistContext";
+import { adminSidebarInsetLeft } from "@/components/admin/adminSidebarLayout";
+import TeamPanelOpenButton from "@/components/admin/TeamPanelOpenButton";
+import { useTeamPanelOpen } from "@/components/admin/useTeamPanelOpen";
 import CreateTherapistModal from "@/components/admin/CreateTherapistModal";
 import { type AdminTherapistListItem } from "@/components/admin/useAdminTherapists";
 import { DEFAULT_THERAPIST_TIMEZONE, normalizeTimeZone } from "@/lib/timezone";
+
+function cx(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
 
 export default function AdminTheraphistShell({ children }: { children: React.ReactNode }) {
   const [therapists, setTherapists] = useState<AdminTherapistListItem[]>([]);
@@ -19,6 +26,7 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
   const [createOpen, setCreateOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [teamPanelOpen, setTeamPanelOpen] = useTeamPanelOpen(true);
 
   const [profilesById, setProfilesById] = useState<Record<string, AdminTherapistProfile>>({});
 
@@ -119,21 +127,29 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
 
   return (
     <div className="flex h-full min-h-0 flex-1 bg-mgmt-surface-container-lowest">
-      {/* Desktop: fixed full-viewport column so the strip stays solid white (same pattern as settings sub-nav) */}
-      <div
-        className="hidden overflow-hidden border-r border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest lg:fixed lg:left-64 lg:top-0 lg:z-40 lg:flex lg:h-dvh lg:w-72 lg:flex-col"
-        data-purpose="therapist-directory-fixed"
-      >
-        <TherapistsDirectoryColumn
-          therapists={therapists}
-          selectedId={selected?.id}
-          onSelect={(t) => {
-            setSelectedId(t.id);
-          }}
-          onAdd={() => setCreateOpen(true)}
-        />
-      </div>
-      <div className="hidden w-72 shrink-0 lg:block" aria-hidden />
+      {/* Desktop: fixed full-viewport team column (hidden entirely when collapsed) */}
+      {teamPanelOpen ? (
+        <>
+          <div
+            className={cx(
+              "hidden overflow-hidden border-r border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest lg:fixed lg:top-0 lg:z-40 lg:flex lg:h-dvh lg:w-72 lg:flex-col",
+              adminSidebarInsetLeft("lg"),
+            )}
+            data-purpose="therapist-directory-fixed"
+          >
+            <TherapistsDirectoryColumn
+              therapists={therapists}
+              selectedId={selected?.id}
+              onSelect={(t) => {
+                setSelectedId(t.id);
+              }}
+              onAdd={() => setCreateOpen(true)}
+              onCollapse={() => setTeamPanelOpen(false)}
+            />
+          </div>
+          <div className="hidden w-72 shrink-0 lg:block" aria-hidden />
+        </>
+      ) : null}
 
       <section className="flex min-w-0 flex-1 flex-col bg-mgmt-surface-container-lowest">
         {/* Mobile: therapist selector */}
@@ -164,6 +180,9 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
 
         <SettingsHeader
           displayName={selected?.name ?? "Therapist"}
+          prefix={
+            !teamPanelOpen ? <TeamPanelOpenButton onClick={() => setTeamPanelOpen(true)} /> : null
+          }
           actions={
             <div className="flex items-center gap-2">
               <button

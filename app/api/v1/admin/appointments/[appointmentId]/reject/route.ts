@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { ok, err } from "@/lib/api/envelope";
 import { getAuthContext, requireRoleService } from "@/lib/api/auth";
 import { newUuid } from "@/lib/api/ids";
+import { AUDIT_ENTITY_APPOINTMENT, writeAuditLog } from "@/lib/audit/writeAuditLog";
 import {
   buildAppointmentRejectionEmailContent,
   sendAppointmentRejectionEmail,
@@ -88,6 +89,18 @@ export async function POST(
     .eq("appointment_id", appointmentId);
 
   if (updateError) return err(updateError.message, 400);
+
+  await writeAuditLog(adminSupabase, {
+    actorUserId: auth.ctx.user.id,
+    action: "rejected",
+    entity: AUDIT_ENTITY_APPOINTMENT,
+    entityId: appointmentId,
+    metadata: {
+      clientId: row.client_id,
+      startAt: row.start_at,
+      reason,
+    },
+  });
 
   const [{ data: clientProfile }, { data: therapistRow }] = await Promise.all([
     adminSupabase

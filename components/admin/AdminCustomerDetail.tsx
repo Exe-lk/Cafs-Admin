@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import AdminCustomerFormDetailsTab from "@/components/admin/AdminCustomerFormDetailsTab";
 import CreateAppointmentModal from "@/components/admin/CreateAppointmentModal";
+import CustomerAppointmentUpdatesPanel from "@/components/admin/CustomerAppointmentUpdatesPanel";
 import EditCustomerModal, { type AdminCustomerProfile } from "@/components/admin/EditCustomerModal";
 import EditAppointmentModal, {
   type AdminEditableAppointment,
@@ -68,7 +69,7 @@ function moneyUsd(v: number) {
   return v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
-type DetailTabId = "about" | "form_details" | "notes" | "appointments" | "updates";
+type DetailTabId = "about" | "notes" | "appointments" | "updates";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -119,6 +120,7 @@ export default function AdminCustomerDetail({
   const [formSheet, setFormSheet] = useState<unknown>(null);
   const [formSheetLoading, setFormSheetLoading] = useState(false);
   const [formSheetError, setFormSheetError] = useState<string | null>(null);
+  const [updatesReloadKey, setUpdatesReloadKey] = useState(0);
 
   const profile: AdminCustomerProfile = useMemo(
     () => ({
@@ -142,7 +144,6 @@ export default function AdminCustomerDetail({
   const tabs: { id: DetailTabId; label: string }[] = useMemo(
     () => [
       { id: "about", label: "About" },
-      { id: "form_details", label: "Form details" },
       { id: "notes", label: "Notes" },
       { id: "appointments", label: "Appointments" },
       { id: "updates", label: "Updates" },
@@ -169,7 +170,13 @@ export default function AdminCustomerDetail({
   }, [moreMenuOpen]);
 
   useEffect(() => {
-    if (tab !== "form_details" || !customer.id) return;
+    if (!tabs.some((t) => t.id === tab)) {
+      setTab("about");
+    }
+  }, [tab, tabs]);
+
+  useEffect(() => {
+    if (tab !== "about" || !customer.id) return;
 
     const ac = new AbortController();
 
@@ -206,8 +213,8 @@ export default function AdminCustomerDetail({
   }, [tab, customer.id]);
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto bg-mgmt-surface-container-lowest">
-      <div className="flex min-h-0 flex-1 flex-col px-6 py-6 sm:px-8 sm:py-8">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-mgmt-surface-container-lowest">
+      <div className="shrink-0 px-6 pt-6 sm:px-8 sm:pt-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="flex min-w-0 flex-1 items-start gap-4 sm:gap-6">
             {customer.avatarUrl ? (
@@ -376,107 +383,116 @@ export default function AdminCustomerDetail({
             </button>
           ))}
         </div>
+      </div>
 
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 sm:px-8 sm:pb-8">
         {tab === "about" && (
-          <div className="grid grid-cols-1 gap-12 py-10 md:grid-cols-2 lg:grid-cols-3">
-            <div className="space-y-6">
-              <div>
-                <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                  Phone
-                </label>
-                <div className="flex items-center gap-3 text-mgmt-on-surface">
-                  <MaterialSymbol name="call" className="text-mgmt-primary" />
-                  <span className="text-sm font-medium">{customer.phone}</span>
-                </div>
-              </div>
-              <div>
-                <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                  Email
-                </label>
-                <div className="flex items-center gap-3 text-mgmt-on-surface">
-                  <MaterialSymbol name="mail" className="text-mgmt-primary" />
-                  <span className="text-sm font-medium">{customer.email}</span>
-                </div>
-              </div>
-              <div>
-                <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                  Company
-                </label>
-                <div className="flex items-center gap-3 text-mgmt-on-surface">
-                  <MaterialSymbol name="business" className="text-mgmt-primary" />
-                  <span className="text-sm font-medium">{customer.company}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-6 border-mgmt-surface-container pl-0 md:border-l lg:pl-12">
-              <div>
-                <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                  Status
-                </label>
-                <span className="inline-flex items-center rounded-full bg-mgmt-primary-container px-4 py-1.5 text-[0.7rem] font-bold text-mgmt-on-primary-container">
-                  {customer.statusLabel}
-                </span>
-              </div>
-              <div>
-                <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                  Last Activity
-                </label>
-                <p className="text-sm font-medium text-mgmt-on-surface">
-                  {customer.lastActivity ?? customer.memberSinceLine}
-                </p>
-              </div>
-              <div>
-                <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                  Tier
-                </label>
-                <p className="text-sm font-medium text-mgmt-on-surface">{customer.tierLabel}</p>
-              </div>
-            </div>
-
-            <div className="space-y-6 border-mgmt-surface-container pl-0 lg:border-l lg:pl-12">
-              <div>
-                <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                  Quick stats
-                </label>
-                <div className="space-y-3 rounded-xl bg-mgmt-surface-container-low p-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-mgmt-on-surface-variant">Total bookings</span>
-                    <span className="text-sm font-semibold text-mgmt-on-surface">
-                      {customer.stats.totalBookings}
-                    </span>
+          <div className="py-10">
+            <section>
+              <h4 className="mb-8 text-sm font-semibold text-mgmt-on-surface">User Details</h4>
+              <div className="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-6">
+                  <div>
+                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
+                      Phone
+                    </label>
+                    <div className="flex items-center gap-3 text-mgmt-on-surface">
+                      <MaterialSymbol name="call" className="text-mgmt-primary" />
+                      <span className="text-sm font-medium">{customer.phone}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-mgmt-on-surface-variant">Cancellations</span>
-                    <span className="text-sm font-semibold text-mgmt-on-surface">
-                      {customer.stats.cancellations}
-                    </span>
+                  <div>
+                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
+                      Email
+                    </label>
+                    <div className="flex items-center gap-3 text-mgmt-on-surface">
+                      <MaterialSymbol name="mail" className="text-mgmt-primary" />
+                      <span className="text-sm font-medium">{customer.email}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-mgmt-on-surface-variant">LTV</span>
-                    <span className="text-sm font-semibold text-mgmt-primary">
-                      {moneyUsd(customer.stats.ltvUsd)}
-                    </span>
+                  <div>
+                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
+                      Company
+                    </label>
+                    <div className="flex items-center gap-3 text-mgmt-on-surface">
+                      <MaterialSymbol name="business" className="text-mgmt-primary" />
+                      <span className="text-sm font-medium">{customer.company}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                  Address
-                </label>
-                <p className="text-sm font-medium text-mgmt-on-surface">{customer.address}</p>
+                <div className="space-y-6 border-mgmt-surface-container pl-0 md:border-l lg:pl-12">
+                  <div>
+                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
+                      Status
+                    </label>
+                    <span className="inline-flex items-center rounded-full bg-mgmt-primary-container px-4 py-1.5 text-[0.7rem] font-bold text-mgmt-on-primary-container">
+                      {customer.statusLabel}
+                    </span>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
+                      Last Activity
+                    </label>
+                    <p className="text-sm font-medium text-mgmt-on-surface">
+                      {customer.lastActivity ?? customer.memberSinceLine}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
+                      Tier
+                    </label>
+                    <p className="text-sm font-medium text-mgmt-on-surface">{customer.tierLabel}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-6 border-mgmt-surface-container pl-0 lg:border-l lg:pl-12">
+                  <div>
+                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
+                      Quick stats
+                    </label>
+                    <div className="space-y-3 rounded-xl bg-mgmt-surface-container-low p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-mgmt-on-surface-variant">Total bookings</span>
+                        <span className="text-sm font-semibold text-mgmt-on-surface">
+                          {customer.stats.totalBookings}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-mgmt-on-surface-variant">Cancellations</span>
+                        <span className="text-sm font-semibold text-mgmt-on-surface">
+                          {customer.stats.cancellations}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-mgmt-on-surface-variant">LTV</span>
+                        <span className="text-sm font-semibold text-mgmt-primary">
+                          {moneyUsd(customer.stats.ltvUsd)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
+                      Address
+                    </label>
+                    <p className="text-sm font-medium text-mgmt-on-surface">{customer.address}</p>
+                  </div>
+                </div>
               </div>
-            </div>
+            </section>
+
+            <section className="mt-14 border-t border-mgmt-surface-container pt-14">
+              <h4 className="mb-8 text-sm font-semibold text-mgmt-on-surface">Form Details</h4>
+              <AdminCustomerFormDetailsTab
+                sheet={formSheet}
+                loading={formSheetLoading}
+                error={formSheetError}
+                embedded
+              />
+            </section>
           </div>
-        )}
-
-        {tab === "form_details" && (
-          <AdminCustomerFormDetailsTab
-            sheet={formSheet}
-            loading={formSheetLoading}
-            error={formSheetError}
-          />
         )}
 
         {tab === "notes" && (
@@ -660,8 +676,15 @@ export default function AdminCustomerDetail({
         )}
 
         {tab === "updates" && (
-          <div className="py-12 text-center text-sm text-mgmt-on-surface-variant">
-            No updates to display (preview).
+          <div className="py-10">
+            <h4 className="mb-4 text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
+              Appointment updates
+            </h4>
+            <CustomerAppointmentUpdatesPanel
+              clientId={customer.id}
+              enabled={tab === "updates"}
+              reloadKey={updatesReloadKey}
+            />
           </div>
         )}
       </div>
@@ -726,7 +749,7 @@ export default function AdminCustomerDetail({
                     ? {
                         ...s,
                         title: next.title,
-                        providerName: next.providerName,
+                        providerName: next.therapistName ?? next.providerName ?? s.providerName,
                         providerAvatarUrl: next.providerAvatarUrl ?? null,
                         videoLink: next.videoLink ?? "",
                         notes: next.notes ?? "",
@@ -736,6 +759,7 @@ export default function AdminCustomerDetail({
               };
             });
             onUpdateCustomer({ ...customer, appointmentDays: updatedDays });
+            setUpdatesReloadKey((k) => k + 1);
             setEditingAppt(null);
           }}
           onDelete={({ dayId, sessionId }) => {
@@ -749,6 +773,7 @@ export default function AdminCustomerDetail({
               })
               .filter((x): x is NonNullable<typeof x> => Boolean(x));
             onUpdateCustomer({ ...customer, appointmentDays: updatedDays });
+            setUpdatesReloadKey((k) => k + 1);
             setEditingAppt(null);
           }}
           onRejected={({ dayId, sessionId }) => {
@@ -762,6 +787,7 @@ export default function AdminCustomerDetail({
               })
               .filter((x): x is NonNullable<typeof x> => Boolean(x));
             onUpdateCustomer({ ...customer, appointmentDays: updatedDays });
+            setUpdatesReloadKey((k) => k + 1);
             setEditingAppt(null);
           }}
         />
