@@ -2,6 +2,11 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 import AppointmentHistoryPanel from "@/components/admin/AppointmentHistoryPanel";
+import BankSlipUploadFields, {
+  hasBankSlipUploadIntent,
+  submitBankSlipTransfer,
+  validateBankSlipFields,
+} from "@/components/admin/BankSlipUploadFields";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import { useAdminTherapists } from "@/components/admin/useAdminTherapists";
 import {
@@ -114,6 +119,9 @@ export default function EditAppointmentModal({
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("details");
   const [historyReloadKey, setHistoryReloadKey] = useState(0);
+  const [bankReference, setBankReference] = useState("");
+  const [bankSlipUrl, setBankSlipUrl] = useState("");
+  const [bankSlipFile, setBankSlipFile] = useState<File | null>(null);
   const { therapists, loading: therapistsLoading } = useAdminTherapists();
 
   const isApiBacked = Boolean(appointment.startAt && appointment.endAt);
@@ -156,6 +164,9 @@ export default function EditAppointmentModal({
     setRejectError(null);
     setTab("details");
     setHistoryReloadKey(0);
+    setBankReference("");
+    setBankSlipUrl("");
+    setBankSlipFile(null);
   }, [appointment]);
 
   const canConfirmReject =
@@ -264,6 +275,9 @@ export default function EditAppointmentModal({
     !readOnly &&
     (draft.appointmentStatus === "pending_payment" ||
       draft.appointmentStatus === "pending_confirmation");
+  const showBankSlipSection =
+    draft.appointmentStatus === "pending_payment" ||
+    draft.appointmentStatus === "pending_confirmation";
 
   const tabBtn = (key: TabKey, label: string) => {
     const active = tab === key;
@@ -502,38 +516,44 @@ export default function EditAppointmentModal({
                 />
               </div>
 
-              <div className="sm:col-span-2">
-                <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
-                  Proof link (optional)
-                </label>
-                <div className="mt-1 flex items-center gap-2">
-                  <input
-                    value={draft.proofUrl ?? ""}
-                    readOnly={readOnly}
-                    disabled={readOnly}
-                    onChange={(e) => setDraft((p) => ({ ...p, proofUrl: e.target.value }))}
-                    className="w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
-                    placeholder="Paste proof URL…"
-                  />
-                  <a
-                    href={draft.proofUrl || undefined}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-disabled={!draft.proofUrl}
-                    className={cx(
-                      "shrink-0 rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wider transition-colors",
-                      draft.proofUrl
-                        ? "bg-mgmt-primary text-mgmt-on-primary transition-opacity hover:opacity-90"
-                        : "cursor-not-allowed bg-mgmt-outline-variant/10 text-mgmt-on-surface-variant/60",
-                    )}
-                    onClick={(e) => {
-                      if (!draft.proofUrl) e.preventDefault();
-                    }}
-                  >
-                    View proof
-                  </a>
+              {showBankSlipSection ? (
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
+                    Bank slip {readOnly ? "" : "(optional)"}
+                  </label>
+                  <div className="mt-2">
+                    <BankSlipUploadFields
+                      bankReference={bankReference}
+                      onBankReferenceChange={setBankReference}
+                      bankSlipUrl={bankSlipUrl}
+                      onBankSlipUrlChange={setBankSlipUrl}
+                      selectedFile={bankSlipFile}
+                      onFileChange={setBankSlipFile}
+                      disabled={busy}
+                      existingProofUrl={draft.proofUrl}
+                      readOnly={readOnly}
+                    />
+                  </div>
                 </div>
-              </div>
+              ) : draft.proofUrl ? (
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
+                    Bank slip
+                  </label>
+                  <div className="mt-2">
+                    <BankSlipUploadFields
+                      bankReference=""
+                      onBankReferenceChange={() => {}}
+                      bankSlipUrl=""
+                      onBankSlipUrlChange={() => {}}
+                      selectedFile={null}
+                      onFileChange={() => {}}
+                      existingProofUrl={draft.proofUrl}
+                      readOnly
+                    />
+                  </div>
+                </div>
+              ) : null}
 
               <div className="sm:col-span-2">
                 <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
@@ -690,26 +710,58 @@ export default function EditAppointmentModal({
                 disabled={!canSave || busy}
                 onClick={() => {
                   if (!canSave) return;
+
+                  const bankSlipFields = {
+                    bankReference,
+                    bankSlipUrl,
+                    selectedFile: bankSlipFile,
+                  };
+                  const bankSlipValidationError = validateBankSlipFields(bankSlipFields);
+                  if (bankSlipValidationError) {
+                    setErrorMsg(bankSlipValidationError);
+                    return;
+                  }
+                  const slipIntent = hasBankSlipUploadIntent(bankSlipFields);
+
                   setSubmitting(true);
                   setErrorMsg(null);
                   (async () => {
                     try {
+                      let nextDraft = draft;
+
+                      if (slipIntent && appointment.startAt && appointment.endAt) {
+                        const slipResult = await submitBankSlipTransfer(
+                          appointment.sessionId,
+                          bankSlipFields,
+                        );
+                        if (!slipResult.ok) {
+                          throw new Error(slipResult.message);
+                        }
+                        nextDraft = {
+                          ...draft,
+                          appointmentStatus: "pending_confirmation",
+                          approvalStatus: "pending",
+                        };
+                        setDraft(nextDraft);
+                      }
+
                       // Persist to API when we have ISO times available (i.e. opened from real calendar data).
                       if (appointment.startAt && appointment.endAt) {
-                        const nextStartAt = draft.startAt ?? appointment.startAt;
-                        const nextEndAt = draft.endAt ?? appointment.endAt;
+                        const nextStartAt = nextDraft.startAt ?? appointment.startAt;
+                        const nextEndAt = nextDraft.endAt ?? appointment.endAt;
                         const hasTimeChange =
                           nextStartAt !== appointment.startAt || nextEndAt !== appointment.endAt;
                         const body: Record<string, unknown> = {
-                          appointmentType: draft.appointmentType ?? appointment.appointmentType,
-                          status: draft.appointmentStatus ?? appointment.appointmentStatus,
-                          note: draft.notes ?? "",
+                          appointmentType:
+                            nextDraft.appointmentType ?? appointment.appointmentType,
+                          status: nextDraft.appointmentStatus ?? appointment.appointmentStatus,
+                          note: nextDraft.notes ?? "",
                         };
                         if (
-                          draft.therapistId &&
-                          draft.therapistId !== appointment.therapistId
+                          nextDraft.therapistId &&
+                          nextDraft.therapistId !== appointment.therapistId
                         ) {
-                          body.therapistId = draft.therapistId;
+                          body.therapistId = nextDraft.therapistId;
                         }
                         if (hasTimeChange) {
                           const scheduleCheck = validateAppointmentSchedule({
@@ -735,7 +787,7 @@ export default function EditAppointmentModal({
                           throw new Error(json?.message || `Save failed (HTTP ${res.status})`);
                         }
                       }
-                      onSave(draft);
+                      onSave(nextDraft);
                       onClose();
                     } catch (e) {
                       setErrorMsg(e instanceof Error ? e.message : "Failed to save appointment");

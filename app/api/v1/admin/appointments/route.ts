@@ -197,6 +197,8 @@ export async function POST(request: NextRequest) {
     formatAmountLkr(therapistServiceRow?.price_lkr) ??
     formatAmountLkr(serviceRow?.base_price_lkr);
 
+  const skipPendingPaymentEmail = body.payment?.method === "bank_transfer";
+
   const { paymentInstructionsText, paymentWhatsappNumber } =
     getPaymentInstructionsFromEnv();
 
@@ -204,7 +206,9 @@ export async function POST(request: NextRequest) {
   let emailError: string | undefined;
   let providerMessageId: string | undefined;
 
-  if (!clientEmail) {
+  if (skipPendingPaymentEmail) {
+    emailError = undefined;
+  } else if (!clientEmail) {
     emailError = "Client has no email on file";
   } else {
     const sendResult = await sendAppointmentPendingPaymentEmail({
@@ -249,6 +253,7 @@ export async function POST(request: NextRequest) {
     paymentWhatsappNumber,
   });
 
+  if (!skipPendingPaymentEmail) {
   const { error: outboxError } = await adminSupabase.from("notification_outbox").insert({
     notification_id: newUuid(),
     user_id: clientId,
@@ -267,6 +272,7 @@ export async function POST(request: NextRequest) {
   });
   if (outboxError) {
     console.error("[create appointment] notification_outbox insert failed", outboxError.message);
+  }
   }
 
   await writeAuditLog(adminSupabase, {

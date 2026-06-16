@@ -61,9 +61,10 @@ export async function resolveBankSlipProofUrl(
     "publicUrl",
     "url",
   ]);
-  if (directUrl) return directUrl;
+  if (directUrl && !directUrl.startsWith("supabase://")) return directUrl;
 
   const path = pickFirstString(payload, [
+    "bankSlipStoragePath",
     "proofPath",
     "bankSlipPath",
     "storagePath",
