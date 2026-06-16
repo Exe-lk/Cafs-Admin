@@ -2,6 +2,11 @@ import type { NextRequest } from "next/server";
 import { ok, err } from "@/lib/api/envelope";
 import { getAuthContext, requireRoleService } from "@/lib/api/auth";
 import { parseIsoDateParam } from "@/lib/api/http";
+import {
+  AUDIT_ENTITY_APPOINTMENT,
+  buildAppointmentUpdateChanges,
+  writeAuditLog,
+} from "@/lib/audit/writeAuditLog";
 import { validateAppointmentSchedule } from "@/lib/calendar/scheduling";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 
@@ -47,31 +52,47 @@ export async function PUT(
   const hasStartAt = typeof body.startAt === "string";
   const hasEndAt = typeof body.endAt === "string";
 
+  const { data: existingRow, error: fetchError } = await adminSupabase
+    .from("appointments")
+    .select(
+      "client_id,start_at,end_at,therapist_id,service_id,appointment_type,status,cancel_reason",
+    )
+    .eq("appointment_id", appointmentId)
+    .maybeSingle();
+
+  if (fetchError) return err(fetchError.message, 400);
+  if (!existingRow) return err("Appointment not found", 404);
+
+  const existing = existingRow as {
+    client_id: string;
+    start_at: string;
+    end_at: string;
+    therapist_id: string;
+    service_id: string;
+    appointment_type: string;
+    status: string;
+    cancel_reason: string | null;
+  };
+
+  const currentStart = parseIsoDateParam(String(existing.start_at));
+  const currentEnd = parseIsoDateParam(String(existing.end_at));
+  if (!currentStart || !currentEnd) return err("Appointment has invalid stored times", 400);
+
+  const nextStart = hasStartAt ? parseIsoDateParam(body.startAt!) : currentStart;
+  const nextEnd = hasEndAt ? parseIsoDateParam(body.endAt!) : currentEnd;
+  if (hasStartAt && !nextStart) return err("Invalid startAt", 400);
+  if (hasEndAt && !nextEnd) return err("Invalid endAt", 400);
+
   if (hasStartAt || hasEndAt) {
-    const { data: existing, error: fetchError } = await adminSupabase
-      .from("appointments")
-      .select("start_at,end_at")
-      .eq("appointment_id", appointmentId)
-      .maybeSingle();
-
-    if (fetchError) return err(fetchError.message, 400);
-    if (!existing) return err("Appointment not found", 404);
-
-    const currentStart = parseIsoDateParam(String(existing.start_at));
-    const currentEnd = parseIsoDateParam(String(existing.end_at));
-    if (!currentStart || !currentEnd) return err("Appointment has invalid stored times", 400);
-
-    const nextStart = hasStartAt ? parseIsoDateParam(body.startAt!) : currentStart;
-    const nextEnd = hasEndAt ? parseIsoDateParam(body.endAt!) : currentEnd;
-    if (!nextStart) return err("Invalid startAt", 400);
-    if (!nextEnd) return err("Invalid endAt", 400);
-
     const scheduleCheck = validateAppointmentSchedule({
-      startUtc: nextStart,
-      endUtc: nextEnd,
+      startUtc: nextStart!,
+      endUtc: nextEnd!,
     });
     if (!scheduleCheck.ok) return err(scheduleCheck.message, 400);
   }
+
+  const resolvedStartAt = hasStartAt ? nextStart!.toISOString() : undefined;
+  const resolvedEndAt = hasEndAt ? nextEnd!.toISOString() : undefined;
 
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (typeof body.therapistId === "string") payload.therapist_id = body.therapistId;
@@ -103,6 +124,23 @@ export async function PUT(
     .eq("appointment_id", appointmentId);
   if (error) return err(error.message, 400);
 
+  const changes = buildAppointmentUpdateChanges(existing, body, {
+    startAt: resolvedStartAt,
+    endAt: resolvedEndAt,
+  });
+
+  await writeAuditLog(adminSupabase, {
+    actorUserId: auth.ctx.user.id,
+    action: "updated",
+    entity: AUDIT_ENTITY_APPOINTMENT,
+    entityId: appointmentId,
+    metadata: {
+      clientId: existing.client_id,
+      startAt: resolvedStartAt ?? existing.start_at,
+      changes,
+    },
+  });
+
   const res = ok(null, "Appointment updated successfully");
   res.headers.set("Cache-Control", "no-store");
   return res;
@@ -122,6 +160,15 @@ export async function DELETE(
   if (!roleCheck.ok) return err("Forbidden", 403);
 
   const adminSupabase = createSupabaseServiceRoleClient();
+
+  const { data: existingRow, error: fetchError } = await adminSupabase
+    .from("appointments")
+    .select("client_id,cancel_reason")
+    .eq("appointment_id", appointmentId)
+    .maybeSingle();
+  if (fetchError) return err(fetchError.message, 400);
+  if (!existingRow) return err("Appointment not found", 404);
+
   const { error } = await adminSupabase
     .from("appointments")
     .update({
@@ -131,6 +178,18 @@ export async function DELETE(
     })
     .eq("appointment_id", appointmentId);
   if (error) return err(error.message, 400);
+
+  const existing = existingRow as { client_id: string; cancel_reason: string | null };
+  await writeAuditLog(adminSupabase, {
+    actorUserId: auth.ctx.user.id,
+    action: "cancelled",
+    entity: AUDIT_ENTITY_APPOINTMENT,
+    entityId: appointmentId,
+    metadata: {
+      clientId: existing.client_id,
+      cancelReason: existing.cancel_reason,
+    },
+  });
 
   const res = ok(null, "Appointment cancelled successfully");
   res.headers.set("Cache-Control", "no-store");

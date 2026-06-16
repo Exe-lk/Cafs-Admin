@@ -3,6 +3,7 @@ import { created, err } from "@/lib/api/envelope";
 import { getAuthContext, requireRoleService } from "@/lib/api/auth";
 import { newUuid } from "@/lib/api/ids";
 import { parseIsoDateParam } from "@/lib/api/http";
+import { AUDIT_ENTITY_APPOINTMENT, writeAuditLog } from "@/lib/audit/writeAuditLog";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { validateAppointmentSchedule } from "@/lib/calendar/scheduling";
 import {
@@ -267,6 +268,20 @@ export async function POST(request: NextRequest) {
   if (outboxError) {
     console.error("[create appointment] notification_outbox insert failed", outboxError.message);
   }
+
+  await writeAuditLog(adminSupabase, {
+    actorUserId: auth.ctx.user.id,
+    action: "created",
+    entity: AUDIT_ENTITY_APPOINTMENT,
+    entityId: appointmentId,
+    metadata: {
+      clientId,
+      serviceName:
+        typeof serviceRow?.name === "string" ? serviceRow.name.trim() : null,
+      startAt: startD.toISOString(),
+      status: "pending_payment",
+    },
+  });
 
   const res = created(
     {

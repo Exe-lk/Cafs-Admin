@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import AdminCustomerFormDetailsTab from "@/components/admin/AdminCustomerFormDetailsTab";
 import CreateAppointmentModal from "@/components/admin/CreateAppointmentModal";
+import CustomerAppointmentUpdatesPanel from "@/components/admin/CustomerAppointmentUpdatesPanel";
 import EditCustomerModal, { type AdminCustomerProfile } from "@/components/admin/EditCustomerModal";
 import EditAppointmentModal, {
   type AdminEditableAppointment,
@@ -119,6 +120,7 @@ export default function AdminCustomerDetail({
   const [formSheet, setFormSheet] = useState<unknown>(null);
   const [formSheetLoading, setFormSheetLoading] = useState(false);
   const [formSheetError, setFormSheetError] = useState<string | null>(null);
+  const [updatesReloadKey, setUpdatesReloadKey] = useState(0);
 
   const profile: AdminCustomerProfile = useMemo(
     () => ({
@@ -674,8 +676,15 @@ export default function AdminCustomerDetail({
         )}
 
         {tab === "updates" && (
-          <div className="py-12 text-center text-sm text-mgmt-on-surface-variant">
-            No updates to display (preview).
+          <div className="py-10">
+            <h4 className="mb-4 text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
+              Appointment updates
+            </h4>
+            <CustomerAppointmentUpdatesPanel
+              clientId={customer.id}
+              enabled={tab === "updates"}
+              reloadKey={updatesReloadKey}
+            />
           </div>
         )}
       </div>
@@ -750,6 +759,7 @@ export default function AdminCustomerDetail({
               };
             });
             onUpdateCustomer({ ...customer, appointmentDays: updatedDays });
+            setUpdatesReloadKey((k) => k + 1);
             setEditingAppt(null);
           }}
           onDelete={({ dayId, sessionId }) => {
@@ -763,6 +773,7 @@ export default function AdminCustomerDetail({
               })
               .filter((x): x is NonNullable<typeof x> => Boolean(x));
             onUpdateCustomer({ ...customer, appointmentDays: updatedDays });
+            setUpdatesReloadKey((k) => k + 1);
             setEditingAppt(null);
           }}
           onRejected={({ dayId, sessionId }) => {
@@ -776,6 +787,7 @@ export default function AdminCustomerDetail({
               })
               .filter((x): x is NonNullable<typeof x> => Boolean(x));
             onUpdateCustomer({ ...customer, appointmentDays: updatedDays });
+            setUpdatesReloadKey((k) => k + 1);
             setEditingAppt(null);
           }}
         />

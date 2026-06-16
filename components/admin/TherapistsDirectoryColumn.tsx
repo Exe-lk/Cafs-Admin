@@ -184,10 +184,10 @@ export default function TherapistsDirectoryColumn({
         ) : multiSelect ? (
           <ul className="space-y-0.5">
             <li>
-              <button
-                type="button"
+              <div
+                role="presentation"
                 onClick={toggleAllTeam}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-mgmt-surface-container-low"
+                className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-mgmt-surface-container-low"
               >
                 <TeamCheckbox
                   checked={allTeamSelected}
@@ -201,16 +201,16 @@ export default function TherapistsDirectoryColumn({
                 <p className="min-w-0 flex-1 truncate text-sm font-semibold text-mgmt-on-surface">
                   All team ({list.length})
                 </p>
-              </button>
+              </div>
             </li>
             {filtered.map((t) => {
               const checked = selectedSet.has(t.id);
               return (
                 <li key={t.id}>
-                  <button
-                    type="button"
+                  <div
+                    role="presentation"
                     onClick={() => toggleTherapist(t.id)}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-mgmt-surface-container-low"
+                    className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-mgmt-surface-container-low"
                   >
                     <TeamCheckbox
                       checked={checked}
@@ -221,7 +221,7 @@ export default function TherapistsDirectoryColumn({
                     <p className="min-w-0 flex-1 truncate text-sm font-semibold text-mgmt-on-surface">
                       {t.name}
                     </p>
-                  </button>
+                  </div>
                 </li>
               );
             })}
