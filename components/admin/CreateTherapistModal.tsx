@@ -24,9 +24,11 @@ export default function CreateTherapistModal({
   onCreate,
 }: {
   onClose: () => void;
-  onCreate: (draft: Omit<AdminTherapistProfile, "id">) => void;
+  onCreate: (draft: Omit<AdminTherapistProfile, "id">) => void | Promise<void>;
 }) {
   const [draft, setDraft] = useState<AdminTherapistProfile>(EMPTY_PROFILE);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -39,6 +41,22 @@ export default function CreateTherapistModal({
   const canSave = useMemo(() => {
     return Boolean(draft.fullName.trim() && draft.email.trim());
   }, [draft.email, draft.fullName]);
+
+  async function handleCreate() {
+    if (!canSave || submitting) return;
+    const { id, ...rest } = draft;
+    void id;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await onCreate(rest);
+      onClose();
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Failed to create therapist");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div
@@ -64,15 +82,16 @@ export default function CreateTherapistModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-10 sm:py-8">
+          {errorMsg ? (
+            <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {errorMsg}
+            </div>
+          ) : null}
           <form
             className="space-y-8"
             onSubmit={(e) => {
               e.preventDefault();
-              if (!canSave) return;
-              const { id, ...rest } = draft;
-              void id;
-              onCreate(rest);
-              onClose();
+              void handleCreate();
             }}
           >
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -172,22 +191,19 @@ export default function CreateTherapistModal({
             type="button"
             className="h-11 rounded-xl border border-mgmt-outline-variant/30 bg-white px-5 text-sm font-semibold text-mgmt-on-surface-variant transition-colors hover:bg-mgmt-surface-container-low"
             onClick={onClose}
+            disabled={submitting}
           >
             Cancel
           </button>
           <button
             type="button"
             className="h-11 rounded-xl bg-gradient-to-br from-mgmt-primary to-mgmt-primary-dim px-6 text-sm font-bold text-mgmt-on-primary shadow-lg transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
-            disabled={!canSave}
+            disabled={!canSave || submitting}
             onClick={() => {
-              if (!canSave) return;
-              const { id, ...rest } = draft;
-              void id;
-              onCreate(rest);
-              onClose();
+              void handleCreate();
             }}
           >
-            Add
+            {submitting ? "Adding…" : "Add"}
           </button>
         </div>
       </div>

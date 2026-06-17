@@ -140,17 +140,29 @@ export default function TherapistsDirectoryColumn({
     <aside className="flex h-full min-h-0 w-full flex-col bg-mgmt-surface-container-lowest">
       <div className="sticky top-0 z-40 shrink-0 border-b border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest px-5 py-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className={SECONDARY_NAV_HEADING_CLASS}>Team</h2>
-          {onCollapse ? (
-            <button
-              type="button"
-              onClick={onCollapse}
-              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-mgmt-on-surface-variant transition-colors hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface lg:inline-flex"
-              aria-label="Hide team panel"
-            >
-              <MaterialSymbol name="chevron_left" className="text-[20px]" />
-            </button>
-          ) : null}
+          <h2 className={SECONDARY_NAV_HEADING_CLASS}>{multiSelect ? "Team" : "Therapists"}</h2>
+          <div className="flex shrink-0 items-center gap-1">
+            {onAdd ? (
+              <button
+                type="button"
+                onClick={onAdd}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-mgmt-on-surface text-mgmt-surface-container-lowest shadow-md transition-transform hover:bg-mgmt-on-background active:scale-95"
+                aria-label="Add therapist"
+              >
+                <MaterialSymbol name="add" className="text-[22px]" />
+              </button>
+            ) : null}
+            {onCollapse ? (
+              <button
+                type="button"
+                onClick={onCollapse}
+                className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-mgmt-on-surface-variant transition-colors hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface lg:inline-flex"
+                aria-label="Hide team panel"
+              >
+                <MaterialSymbol name="chevron_left" className="text-[20px]" />
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div className="mt-3 flex items-center gap-2 rounded-xl bg-mgmt-surface-container-low px-3 py-2">

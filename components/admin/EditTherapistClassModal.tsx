@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import { useAdminTherapists } from "@/components/admin/useAdminTherapists";
 
 export type EditTherapistClassModalItem = {
   id: string;
@@ -16,27 +17,6 @@ export type EditTherapistClassModalItem = {
   endAt?: string;
   capacity?: string;
 };
-
-const PLACEHOLDER_CLASSES = [
-  { id: "cls-001", label: "Mindfulness Foundations" },
-  { id: "cls-002", label: "Anxiety Support Group" },
-  { id: "cls-003", label: "Parenting Skills Workshop" },
-] as const;
-
-const PLACEHOLDER_THERAPISTS = [
-  { id: "th-001", label: "Dr. Anjali Perera" },
-  { id: "th-002", label: "Dr. Ruwan Silva" },
-  { id: "th-003", label: "Ms. Nethmi Fernando" },
-] as const;
-
-const PLACEHOLDER_TITLE = "Evening mindfulness group";
-const PLACEHOLDER_DURATION = "90 mins";
-const PLACEHOLDER_COST = "Rs 2,500";
-const PLACEHOLDER_CAPACITY = "12";
-const PLACEHOLDER_DESCRIPTION =
-  "A supportive group class introducing mindfulness techniques, breathing exercises, and stress management strategies.";
-const PLACEHOLDER_START_AT = "2026-06-15T18:00";
-const PLACEHOLDER_END_AT = "2026-06-15T19:30";
 
 const inputClass =
   "h-12 w-full rounded-xl border-none bg-mgmt-surface-container-low px-4 text-mgmt-on-surface transition-all focus:bg-mgmt-surface-container-lowest focus:ring-2 focus:ring-mgmt-primary/20 focus:outline-none";
@@ -54,6 +34,18 @@ function toDateTimeLocalValue(iso?: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function dateTimeLocalToIso(value: string): string | null {
+  if (!value.trim()) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function parseCapacity(value: string): number | null {
+  const n = Number.parseInt(value.trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 type Props = {
   /** When `null`, the modal opens in “add new class” mode with empty defaults. */
   classItem: EditTherapistClassModalItem | null;
@@ -65,29 +57,23 @@ export default function EditTherapistClassModal({ classItem, onClose, onSaved }:
   const isCreate = classItem === null;
   const titleId = useId();
 
-  const [selectedClassId, setSelectedClassId] = useState(
-    () => classItem?.classId ?? classItem?.id ?? PLACEHOLDER_CLASSES[0]!.id,
-  );
-  const [title, setTitle] = useState(() => classItem?.title ?? (isCreate ? "" : PLACEHOLDER_TITLE));
-  const [therapistId, setTherapistId] = useState(
-    () => classItem?.therapistId ?? PLACEHOLDER_THERAPISTS[0]!.id,
-  );
-  const [duration, setDuration] = useState(
-    () => classItem?.duration ?? (isCreate ? "" : PLACEHOLDER_DURATION),
-  );
-  const [cost, setCost] = useState(() => classItem?.cost ?? (isCreate ? "" : PLACEHOLDER_COST));
-  const [startAt, setStartAt] = useState(
-    () => toDateTimeLocalValue(classItem?.startAt) || (isCreate ? "" : PLACEHOLDER_START_AT),
-  );
-  const [endAt, setEndAt] = useState(
-    () => toDateTimeLocalValue(classItem?.endAt) || (isCreate ? "" : PLACEHOLDER_END_AT),
-  );
-  const [capacity, setCapacity] = useState(
-    () => classItem?.capacity ?? (isCreate ? "" : PLACEHOLDER_CAPACITY),
-  );
-  const [description, setDescription] = useState(
-    () => classItem?.description ?? (isCreate ? "" : PLACEHOLDER_DESCRIPTION),
-  );
+  const [title, setTitle] = useState(() => classItem?.title ?? "");
+  const [therapistId, setTherapistId] = useState(() => classItem?.therapistId ?? "");
+  const [duration, setDuration] = useState(() => classItem?.duration ?? "");
+  const [cost, setCost] = useState(() => classItem?.cost ?? "");
+  const [startAt, setStartAt] = useState(() => toDateTimeLocalValue(classItem?.startAt));
+  const [endAt, setEndAt] = useState(() => toDateTimeLocalValue(classItem?.endAt));
+  const [capacity, setCapacity] = useState(() => classItem?.capacity ?? "");
+  const [description, setDescription] = useState(() => classItem?.description ?? "");
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const { therapists, loading: therapistsLoading } = useAdminTherapists();
+
+  useEffect(() => {
+    if (therapistId || therapists.length === 0) return;
+    setTherapistId(therapists[0]!.id);
+  }, [therapistId, therapists]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -105,27 +91,90 @@ export default function EditTherapistClassModal({ classItem, onClose, onSaved }:
     };
   }, []);
 
-  function onDelete() {
+  async function onDelete() {
     if (isCreate || !classItem) return;
     const ok = window.confirm("Delete this class?");
     if (!ok) return;
-    onSaved?.();
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`/api/v1/admin/classes/${encodeURIComponent(classItem.id)}`, {
+        method: "DELETE",
+        cache: "no-store",
+      });
+      const json = (await res.json()) as { status?: string; message?: string };
+      if (!res.ok || json?.status !== "success") {
+        throw new Error(json?.message || `Delete failed (HTTP ${res.status})`);
+      }
+      onSaved?.();
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Failed to delete class");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  function onSave() {
-    if (!selectedClassId || !title.trim() || !therapistId) return;
-    onSaved?.();
+  async function onSave() {
+    if (!canSave) return;
+
+    const startIso = dateTimeLocalToIso(startAt);
+    const endIso = dateTimeLocalToIso(endAt);
+    if (!startIso || !endIso) {
+      setErrorMsg("Invalid start or end time");
+      return;
+    }
+    if (new Date(endIso) <= new Date(startIso)) {
+      setErrorMsg("End time must be after start time");
+      return;
+    }
+
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      const payload = {
+        title: title.trim(),
+        description: description.trim() || null,
+        startAt: startIso,
+        endAt: endIso,
+        capacity: parseCapacity(capacity),
+        isActive: true,
+      };
+
+      const res = isCreate
+        ? await fetch("/api/v1/admin/classes", {
+            method: "POST",
+            cache: "no-store",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+        : await fetch(`/api/v1/admin/classes/${encodeURIComponent(classItem!.id)}`, {
+            method: "PUT",
+            cache: "no-store",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+      const json = (await res.json()) as { status?: string; message?: string };
+      if (!res.ok || json?.status !== "success") {
+        throw new Error(json?.message || `Save failed (HTTP ${res.status})`);
+      }
+      onSaved?.();
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Failed to save class");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const canSave = Boolean(
-    selectedClassId &&
-      title.trim() &&
+    title.trim() &&
       therapistId &&
       duration.trim() &&
       cost.trim() &&
       startAt &&
       endAt &&
-      capacity.trim(),
+      capacity.trim() &&
+      !submitting,
   );
 
   return (
@@ -160,25 +209,12 @@ export default function EditTherapistClassModal({ classItem, onClose, onSaved }:
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div className="space-y-2 md:col-span-2">
-                <label className={labelClass} htmlFor="therapist-class-select">
-                  Select a class
-                </label>
-                <select
-                  id="therapist-class-select"
-                  value={selectedClassId}
-                  onChange={(e) => setSelectedClassId(e.target.value)}
-                  className={inputClass}
-                >
-                  {PLACEHOLDER_CLASSES.map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      {cls.label}
-                    </option>
-                  ))}
-                </select>
+            {errorMsg ? (
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {errorMsg}
               </div>
-
+            ) : null}
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
                 <label className={labelClass} htmlFor="therapist-class-title">
                   Title
@@ -200,13 +236,20 @@ export default function EditTherapistClassModal({ classItem, onClose, onSaved }:
                   id="therapist-class-therapist"
                   value={therapistId}
                   onChange={(e) => setTherapistId(e.target.value)}
+                  disabled={therapistsLoading}
                   className={inputClass}
                 >
-                  {PLACEHOLDER_THERAPISTS.map((therapist) => (
-                    <option key={therapist.id} value={therapist.id}>
-                      {therapist.label}
-                    </option>
-                  ))}
+                  {therapistsLoading ? (
+                    <option value="">Loading therapists…</option>
+                  ) : therapists.length === 0 ? (
+                    <option value="">No therapists available</option>
+                  ) : (
+                    therapists.map((therapist) => (
+                      <option key={therapist.id} value={therapist.id}>
+                        {therapist.name}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -298,8 +341,9 @@ export default function EditTherapistClassModal({ classItem, onClose, onSaved }:
               {!isCreate && (
                 <button
                   type="button"
-                  onClick={onDelete}
-                  className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50 active:scale-[0.99]"
+                  onClick={() => void onDelete()}
+                  disabled={submitting}
+                  className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50 active:scale-[0.99] disabled:opacity-40"
                 >
                   Delete
                 </button>
@@ -309,17 +353,18 @@ export default function EditTherapistClassModal({ classItem, onClose, onSaved }:
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-mgmt-on-surface-variant hover:bg-mgmt-surface-container-low"
+                disabled={submitting}
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-mgmt-on-surface-variant hover:bg-mgmt-surface-container-low disabled:opacity-40"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 disabled={!canSave}
-                onClick={onSave}
+                onClick={() => void onSave()}
                 className="rounded-xl bg-mgmt-primary px-5 py-2 text-sm font-bold text-mgmt-on-primary transition-transform active:scale-95 disabled:opacity-40"
               >
-                Save
+                {submitting ? "Saving…" : "Save"}
               </button>
             </div>
           </footer>

@@ -145,6 +145,7 @@ export default function AdminClassesHome() {
             startAt: typeof c.start_at === "string" ? c.start_at : undefined,
             endAt: typeof c.end_at === "string" ? c.end_at : undefined,
             capacity: typeof c.capacity === "number" ? String(c.capacity) : undefined,
+            description: typeof c.description === "string" ? c.description : undefined,
           };
         });
         setClasses(next);
@@ -174,7 +175,10 @@ export default function AdminClassesHome() {
           key={classModal === "create" ? "new-therapist-class" : classModal.id}
           classItem={classModal === "create" ? null : classModal}
           onClose={() => setClassModal("closed")}
-          onSaved={() => setClassModal("closed")}
+          onSaved={() => {
+            setClassModal("closed");
+            reload();
+          }}
         />
       ) : null}
 

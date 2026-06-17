@@ -144,7 +144,6 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
                 setSelectedId(t.id);
               }}
               onAdd={() => setCreateOpen(true)}
-              onCollapse={() => setTeamPanelOpen(false)}
             />
           </div>
           <div className="hidden w-72 shrink-0 lg:block" aria-hidden />

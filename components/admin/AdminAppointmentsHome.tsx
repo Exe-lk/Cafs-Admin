@@ -8,6 +8,10 @@ import {
   APPOINTMENT_STATUS_OPTIONS,
   appointmentStatusFromSearchParams,
 } from "@/components/admin/AppointmentsSubNav";
+import {
+  computeAppointmentCounts,
+  usePublishAppointmentCounts,
+} from "@/components/admin/useAppointmentCounts";
 import EditAppointmentModal, {
   type AdminEditableAppointment,
 } from "@/components/admin/EditAppointmentModal";
@@ -192,7 +196,7 @@ function ViewProofButton({ proofUrl }: { proofUrl: string | null }) {
         className="inline-flex shrink-0 items-center justify-center rounded-lg border border-mgmt-outline-variant p-1.5 text-mgmt-primary transition-colors hover:bg-mgmt-surface-container-low"
         onClick={(e) => e.stopPropagation()}
       >
-        <MaterialSymbol name="receipt_long" className="text-[18px]" />
+        <MaterialSymbol name="description" className="text-[18px]" />
       </a>
     );
   }
@@ -204,7 +208,7 @@ function ViewProofButton({ proofUrl }: { proofUrl: string | null }) {
       className="inline-flex shrink-0 cursor-not-allowed items-center justify-center rounded-lg border border-mgmt-outline-variant/40 p-1.5 text-mgmt-on-surface-variant/50"
       aria-label="Payment proof not available"
     >
-      <MaterialSymbol name="receipt_long" className="text-[18px]" />
+      <MaterialSymbol name="description" className="text-[18px]" />
     </button>
   );
 }
@@ -275,6 +279,7 @@ function toEditableAppointment(item: AppointmentItem): AdminEditableAppointment 
 export default function AdminAppointmentsHome() {
   const searchParams = useSearchParams();
   const statusFilter = appointmentStatusFromSearchParams(searchParams.get("status"));
+  const publishAppointmentCounts = usePublishAppointmentCounts();
 
   const [items, setItems] = useState<AppointmentItem[]>([]);
   const [query, setQuery] = useState("");
@@ -293,12 +298,15 @@ export default function AdminAppointmentsHome() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
+  const refreshAppointments = useCallback(() => {
+    setReloadKey((k) => k + 1);
+  }, []);
+
   const loadItems = useCallback(async (signal: AbortSignal) => {
     setLoading(true);
     setErrorMsg(null);
     try {
       const sp = new URLSearchParams();
-      if (statusFilter !== "all") sp.set("status", statusFilter);
       if (query.trim()) sp.set("q", query.trim());
 
       const res = await fetch(`/api/v1/admin/appointments/list?${sp.toString()}`, {
@@ -323,7 +331,11 @@ export default function AdminAppointmentsHome() {
     } finally {
       setLoading(false);
     }
-  }, [query, statusFilter]);
+  }, [query]);
+
+  useEffect(() => {
+    publishAppointmentCounts(computeAppointmentCounts(items), loading);
+  }, [items, loading, publishAppointmentCounts]);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -365,6 +377,7 @@ export default function AdminAppointmentsHome() {
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
+      if (statusFilter !== "all" && item.status !== statusFilter) return false;
       if (dateFilter && appointmentDateFilterKey(item) !== dateFilter) return false;
       if (therapistFilter && item.therapist.therapistId !== therapistFilter) return false;
       if (serviceFilter && item.service.serviceId !== serviceFilter) return false;
@@ -378,7 +391,7 @@ export default function AdminAppointmentsHome() {
       }
       return true;
     });
-  }, [items, dateFilter, therapistFilter, serviceFilter, paymentFilter]);
+  }, [items, statusFilter, dateFilter, therapistFilter, serviceFilter, paymentFilter]);
 
   const totalResults = filteredItems.length;
   const totalPages = Math.max(1, Math.ceil(totalResults / pageSize));
@@ -424,14 +437,14 @@ export default function AdminAppointmentsHome() {
       if (!res.ok || json.status !== "success") {
         throw new Error(json.message || `Delete failed (HTTP ${res.status})`);
       }
-      setReloadKey((k) => k + 1);
+      refreshAppointments();
       setNoticeMsg(null);
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Failed to delete appointment");
     } finally {
       setDeletingId(null);
     }
-  }, []);
+  }, [refreshAppointments]);
 
   return (
     <main
@@ -447,11 +460,11 @@ export default function AdminAppointmentsHome() {
           onClose={closeAppointmentModal}
           onDelete={() => {
             closeAppointmentModal();
-            setReloadKey((k) => k + 1);
+            refreshAppointments();
           }}
           onRejected={({ emailSent, emailError }) => {
             closeAppointmentModal();
-            setReloadKey((k) => k + 1);
+            refreshAppointments();
             if (!emailSent && emailError) {
               setNoticeMsg(
                 `Appointment cancelled, but the client could not be emailed: ${emailError}`,
@@ -462,7 +475,7 @@ export default function AdminAppointmentsHome() {
           }}
           onSave={() => {
             closeAppointmentModal();
-            setReloadKey((k) => k + 1);
+            refreshAppointments();
             setNoticeMsg(null);
           }}
         />
