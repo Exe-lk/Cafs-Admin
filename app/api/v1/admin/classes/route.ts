@@ -1,8 +1,9 @@
 import type { NextRequest } from "next/server";
 import { ok, created, err } from "@/lib/api/envelope";
-import { getAuthContext, requireRole } from "@/lib/api/auth";
+import { getAuthContext, requireRoleService } from "@/lib/api/auth";
 import { newUuid } from "@/lib/api/ids";
 import { parseIsoDateParam } from "@/lib/api/http";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 
 type CreateBody = {
   title?: string;
@@ -16,13 +17,14 @@ type CreateBody = {
 export async function GET(request: NextRequest) {
   const auth = await getAuthContext(request);
   if (!auth.ok) return err("Unauthorized", 401);
-  const roleCheck = await requireRole(auth.supabase, auth.ctx.user.id, [
+  const roleCheck = await requireRoleService(auth.ctx.user.id, [
     "admin",
     "front_office",
   ]);
   if (!roleCheck.ok) return err("Forbidden", 403);
 
-  const { data, error } = await auth.supabase
+  const adminSupabase = createSupabaseServiceRoleClient();
+  const { data, error } = await adminSupabase
     .from("classes")
     .select("class_id,title,description,start_at,end_at,capacity,is_active,created_at,updated_at")
     .order("start_at", { ascending: false });
@@ -36,7 +38,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await getAuthContext(request);
   if (!auth.ok) return err("Unauthorized", 401);
-  const roleCheck = await requireRole(auth.supabase, auth.ctx.user.id, [
+  const roleCheck = await requireRoleService(auth.ctx.user.id, [
     "admin",
     "front_office",
   ]);
@@ -57,7 +59,8 @@ export async function POST(request: NextRequest) {
   const now = new Date().toISOString();
   const classId = newUuid();
 
-  const { error } = await auth.supabase.from("classes").insert({
+  const adminSupabase = createSupabaseServiceRoleClient();
+  const { error } = await adminSupabase.from("classes").insert({
     class_id: classId,
     title,
     description: body.description ?? null,
@@ -74,4 +77,3 @@ export async function POST(request: NextRequest) {
   res.headers.set("Cache-Control", "no-store");
   return res;
 }
-

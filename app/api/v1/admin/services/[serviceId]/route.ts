@@ -2,8 +2,9 @@ import type { NextRequest } from "next/server";
 import { ok, err } from "@/lib/api/envelope";
 import { getAuthContext, requireRoleService } from "@/lib/api/auth";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
-import { isoNow } from "@/lib/api/envelope";
-import {  requireRole } from "@/lib/api/auth";
+
+const SELECT_COLUMNS =
+  "service_id,name,description,visibility,default_duration_minutes,base_price_lkr,currency,allowed_appointment_type,is_active,created_at,updated_at";
 
 type PutBody = {
   name?: string;
@@ -23,7 +24,7 @@ export async function PUT(
   const { serviceId } = await params;
   const auth = await getAuthContext(request);
   if (!auth.ok) return err("Unauthorized", 401);
-  const roleCheck = await requireRole(auth.supabase, auth.ctx.user.id, ["admin"]);
+  const roleCheck = await requireRoleService(auth.ctx.user.id, ["admin"]);
   if (!roleCheck.ok) return err("Forbidden", 403);
 
   let body: PutBody;
@@ -54,13 +55,17 @@ export async function PUT(
   }
   if (typeof body.isActive === "boolean") payload.is_active = body.isActive;
 
-  const { error } = await auth.supabase
+  const adminSupabase = createSupabaseServiceRoleClient();
+  const { data, error } = await adminSupabase
     .from("services")
     .update(payload)
-    .eq("service_id", serviceId);
+    .eq("service_id", serviceId)
+    .select(SELECT_COLUMNS)
+    .maybeSingle();
   if (error) return err(error.message, 400);
+  if (!data) return err("Service not found", 404);
 
-  const res = ok(null, "Service updated successfully");
+  const res = ok(data, "Service updated successfully");
   res.headers.set("Cache-Control", "no-store");
   return res;
 }
@@ -72,15 +77,20 @@ export async function DELETE(
   const { serviceId } = await params;
   const auth = await getAuthContext(request);
   if (!auth.ok) return err("Unauthorized", 401);
-  const roleCheck = await requireRole(auth.supabase, auth.ctx.user.id, ["admin"]);
+  const roleCheck = await requireRoleService(auth.ctx.user.id, ["admin"]);
   if (!roleCheck.ok) return err("Forbidden", 403);
 
+  const adminSupabase = createSupabaseServiceRoleClient();
+
   // Soft-disable (recommended): keep history.
-  const { error } = await auth.supabase
+  const { data, error } = await adminSupabase
     .from("services")
     .update({ is_active: false, updated_at: new Date().toISOString() })
-    .eq("service_id", serviceId);
+    .eq("service_id", serviceId)
+    .select("service_id")
+    .maybeSingle();
   if (error) return err(error.message, 400);
+  if (!data) return err("Service not found", 404);
 
   const res = ok(null, "Service deleted successfully");
   res.headers.set("Cache-Control", "no-store");
