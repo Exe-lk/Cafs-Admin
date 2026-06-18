@@ -9,7 +9,7 @@ import {
   appointmentStatusFromSearchParams,
 } from "@/components/admin/AppointmentsSubNav";
 import {
-  computeAppointmentCounts,
+  type AppointmentCounts,
   usePublishAppointmentCounts,
 } from "@/components/admin/useAppointmentCounts";
 import EditAppointmentModal, {
@@ -20,7 +20,6 @@ import { labelForPaymentMethod } from "@/lib/calendar/notificationLabels";
 import {
   formatDateInTimeZone,
   formatTimeInTimeZone,
-  getYMDInTimeZone,
   normalizeTimeZone,
   parseDbUtcTimestamp,
 } from "@/lib/timezone";
@@ -68,6 +67,10 @@ type AppointmentItem = {
 
 type StatusFilter = "all" | AppointmentStatus;
 
+type TimeScope = "upcoming" | "past" | "all";
+
+type FilterOption = { id: string; name: string };
+
 type AppointmentModalState = {
   mode: "view" | "edit";
   item: AppointmentItem;
@@ -82,6 +85,14 @@ const PAYMENT_FILTER_OPTIONS = [
   { value: "cash", label: labelForPaymentMethod("cash") },
   { value: "none", label: "No payment method" },
 ] as const;
+
+const TIME_SCOPE_OPTIONS = [
+  { value: "upcoming", label: "Upcoming" },
+  { value: "past", label: "Past" },
+  { value: "all", label: "All time" },
+] as const;
+
+const SEARCH_DEBOUNCE_MS = 300;
 
 const FILTER_SELECT_CLASS =
   "h-10 w-full appearance-none rounded-lg border border-mgmt-outline-variant bg-white py-2 pl-3 pr-9 text-sm text-mgmt-on-surface shadow-sm transition-colors hover:border-mgmt-on-surface-variant/80 focus:border-mgmt-on-surface-variant focus:ring-1 focus:ring-mgmt-outline-variant focus:outline-none";
@@ -196,7 +207,7 @@ function ViewProofButton({ proofUrl }: { proofUrl: string | null }) {
         className="inline-flex shrink-0 items-center justify-center rounded-lg border border-mgmt-outline-variant p-1.5 text-mgmt-primary transition-colors hover:bg-mgmt-surface-container-low"
         onClick={(e) => e.stopPropagation()}
       >
-        <MaterialSymbol name="description" className="text-[18px]" />
+        <MaterialSymbol name="receipt_long" className="text-[18px]" />
       </a>
     );
   }
@@ -208,7 +219,7 @@ function ViewProofButton({ proofUrl }: { proofUrl: string | null }) {
       className="inline-flex shrink-0 cursor-not-allowed items-center justify-center rounded-lg border border-mgmt-outline-variant/40 p-1.5 text-mgmt-on-surface-variant/50"
       aria-label="Payment proof not available"
     >
-      <MaterialSymbol name="description" className="text-[18px]" />
+      <MaterialSymbol name="receipt_long" className="text-[18px]" />
     </button>
   );
 }
@@ -246,13 +257,6 @@ function formatAppointmentRange(
   };
 }
 
-function appointmentDateFilterKey(item: AppointmentItem): string {
-  const startUtc = parseDbUtcTimestamp(item.startAt);
-  if (!startUtc) return "";
-  const ymd = getYMDInTimeZone(startUtc, normalizeTimeZone(item.therapist.timezone));
-  return `${ymd.year}-${String(ymd.month).padStart(2, "0")}-${String(ymd.day).padStart(2, "0")}`;
-}
-
 function toEditableAppointment(item: AppointmentItem): AdminEditableAppointment {
   const timeZone = normalizeTimeZone(item.therapist.timezone);
   const { dateLine, timeRange } = formatAppointmentRange(item.startAt, item.endAt, timeZone);
@@ -282,12 +286,17 @@ export default function AdminAppointmentsHome() {
   const publishAppointmentCounts = usePublishAppointmentCounts();
 
   const [items, setItems] = useState<AppointmentItem[]>([]);
+  const [totalResults, setTotalResults] = useState(0);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [timeScope, setTimeScope] = useState<TimeScope>("upcoming");
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState("");
   const [therapistFilter, setTherapistFilter] = useState("");
   const [serviceFilter, setServiceFilter] = useState("");
   const [paymentFilter, setPaymentFilter] = useState("");
+  const [therapistOptions, setTherapistOptions] = useState<FilterOption[]>([]);
+  const [serviceOptions, setServiceOptions] = useState<FilterOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [noticeMsg, setNoticeMsg] = useState<string | null>(null);
@@ -302,12 +311,84 @@ export default function AdminAppointmentsHome() {
     setReloadKey((k) => k + 1);
   }, []);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedQuery(query);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    const ac = new AbortController();
+
+    void (async () => {
+      try {
+        const [therapistsRes, servicesRes] = await Promise.all([
+          fetch("/api/v1/admin/therapists", { method: "GET", cache: "no-store", signal: ac.signal }),
+          fetch("/api/v1/admin/services", { method: "GET", cache: "no-store", signal: ac.signal }),
+        ]);
+
+        const therapistsJson = (await therapistsRes.json()) as {
+          status?: string;
+          data?: {
+            items?: Array<{
+              therapist_id?: string;
+              profiles?: { full_name?: string | null } | Array<{ full_name?: string | null }>;
+            }>;
+          };
+        };
+        const servicesJson = (await servicesRes.json()) as {
+          status?: string;
+          data?: { items?: Array<{ service_id?: string; name?: string | null }> };
+        };
+
+        if (therapistsRes.ok && therapistsJson.status === "success") {
+          const options = (therapistsJson.data?.items ?? [])
+            .map((row) => {
+              const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+              return {
+                id: row.therapist_id ?? "",
+                name: profile?.full_name?.trim() || "Therapist",
+              };
+            })
+            .filter((option) => option.id)
+            .sort((a, b) => a.name.localeCompare(b.name));
+          setTherapistOptions(options);
+        }
+
+        if (servicesRes.ok && servicesJson.status === "success") {
+          const options = (servicesJson.data?.items ?? [])
+            .map((row) => ({
+              id: row.service_id ?? "",
+              name: row.name?.trim() || "Service",
+            }))
+            .filter((option) => option.id)
+            .sort((a, b) => a.name.localeCompare(b.name));
+          setServiceOptions(options);
+        }
+      } catch (e) {
+        if ((e as { name?: string })?.name === "AbortError") return;
+      }
+    })();
+
+    return () => ac.abort();
+  }, []);
+
   const loadItems = useCallback(async (signal: AbortSignal) => {
     setLoading(true);
+    publishAppointmentCounts(null, true);
     setErrorMsg(null);
     try {
       const sp = new URLSearchParams();
-      if (query.trim()) sp.set("q", query.trim());
+      sp.set("timeScope", timeScope);
+      sp.set("page", String(page));
+      sp.set("limit", String(pageSize));
+      if (statusFilter !== "all") sp.set("status", statusFilter);
+      if (debouncedQuery.trim()) sp.set("q", debouncedQuery.trim());
+      if (dateFilter) sp.set("date", dateFilter);
+      if (therapistFilter) sp.set("therapistId", therapistFilter);
+      if (serviceFilter) sp.set("serviceId", serviceFilter);
+      if (paymentFilter) sp.set("paymentMethod", paymentFilter);
 
       const res = await fetch(`/api/v1/admin/appointments/list?${sp.toString()}`, {
         method: "GET",
@@ -317,25 +398,46 @@ export default function AdminAppointmentsHome() {
       const json = (await res.json()) as {
         status?: string;
         message?: string;
-        data?: { items?: AppointmentItem[]; total?: number };
+        data?: {
+          items?: AppointmentItem[];
+          total?: number;
+          pagination?: { totalItems?: number; page?: number; totalPages?: number };
+          statusCounts?: AppointmentCounts;
+        };
       };
       if (!res.ok || json.status !== "success" || !json.data) {
         throw new Error(json.message || `Failed to load appointments (HTTP ${res.status})`);
       }
 
       setItems(json.data.items ?? []);
+      setTotalResults(json.data.pagination?.totalItems ?? json.data.total ?? json.data.items?.length ?? 0);
+
+      if (json.data.statusCounts) {
+        publishAppointmentCounts(json.data.statusCounts, false);
+      } else {
+        publishAppointmentCounts(null, false);
+      }
     } catch (e) {
       if ((e as { name?: string })?.name === "AbortError") return;
       setErrorMsg(e instanceof Error ? e.message : "Failed to load appointments");
       setItems([]);
+      setTotalResults(0);
+      publishAppointmentCounts(null, false);
     } finally {
       setLoading(false);
     }
-  }, [query]);
-
-  useEffect(() => {
-    publishAppointmentCounts(computeAppointmentCounts(items), loading);
-  }, [items, loading, publishAppointmentCounts]);
+  }, [
+    dateFilter,
+    debouncedQuery,
+    page,
+    pageSize,
+    paymentFilter,
+    publishAppointmentCounts,
+    serviceFilter,
+    statusFilter,
+    therapistFilter,
+    timeScope,
+  ]);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -345,66 +447,26 @@ export default function AdminAppointmentsHome() {
 
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, query, pageSize, dateFilter, therapistFilter, serviceFilter, paymentFilter]);
+  }, [statusFilter]);
 
-  const therapistOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const item of items) {
-      if (item.therapist.therapistId) {
-        map.set(item.therapist.therapistId, item.therapist.fullName || "Therapist");
-      }
-    }
-    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
-  }, [items]);
-
-  const serviceOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const item of items) {
-      if (item.service.serviceId) {
-        map.set(item.service.serviceId, item.service.name || "Service");
-      }
-    }
-    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
-  }, [items]);
+  const resetToFirstPage = useCallback(() => {
+    setPage(1);
+  }, []);
 
   const hasActiveAdvancedFilters = Boolean(
-    dateFilter || therapistFilter || serviceFilter || paymentFilter,
+    timeScope !== "upcoming" ||
+      dateFilter ||
+      therapistFilter ||
+      serviceFilter ||
+      paymentFilter,
   );
 
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      if (statusFilter !== "all" && item.status !== statusFilter) return false;
-      if (dateFilter && appointmentDateFilterKey(item) !== dateFilter) return false;
-      if (therapistFilter && item.therapist.therapistId !== therapistFilter) return false;
-      if (serviceFilter && item.service.serviceId !== serviceFilter) return false;
-      if (paymentFilter) {
-        const method = item.payment?.method ?? null;
-        if (paymentFilter === "none") {
-          if (method) return false;
-        } else if (method !== paymentFilter) {
-          return false;
-        }
-      }
-      return true;
-    });
-  }, [items, statusFilter, dateFilter, therapistFilter, serviceFilter, paymentFilter]);
-
-  const totalResults = filteredItems.length;
   const totalPages = Math.max(1, Math.ceil(totalResults / pageSize));
   const safePage = Math.min(page, totalPages);
 
   useEffect(() => {
     if (page !== safePage) setPage(safePage);
   }, [page, safePage]);
-
-  const paginatedItems = useMemo(() => {
-    const start = (safePage - 1) * pageSize;
-    return filteredItems.slice(start, start + pageSize);
-  }, [filteredItems, pageSize, safePage]);
 
   const activeStatusLabel = useMemo(() => {
     return (
@@ -503,7 +565,10 @@ export default function AdminAppointmentsHome() {
               </div>
               <input
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  resetToFirstPage();
+                }}
                 className="block h-10 w-full rounded-lg border border-mgmt-outline-variant py-2 pr-3 pl-10 text-sm text-mgmt-on-surface placeholder:text-mgmt-on-surface-variant focus:border-mgmt-on-surface-variant focus:ring-1 focus:ring-mgmt-outline-variant focus:outline-none"
                 placeholder="Search customer, therapist, or service"
                 type="search"
@@ -535,6 +600,31 @@ export default function AdminAppointmentsHome() {
               data-purpose="advanced-filters"
             >
               <label className="flex min-w-0 flex-1 flex-col gap-1.5 sm:min-w-[180px] sm:max-w-[220px]">
+                <span className="text-xs font-semibold text-mgmt-on-surface-variant">Time period</span>
+                <div className="relative">
+                  <select
+                    value={timeScope}
+                    onChange={(e) => {
+                      setTimeScope(e.target.value as TimeScope);
+                      resetToFirstPage();
+                    }}
+                    className={FILTER_SELECT_CLASS}
+                  >
+                    {TIME_SCOPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <MaterialSymbol
+                    name="expand_more"
+                    className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[18px] text-mgmt-on-surface-variant"
+                    aria-hidden
+                  />
+                </div>
+              </label>
+
+              <label className="flex min-w-0 flex-1 flex-col gap-1.5 sm:min-w-[180px] sm:max-w-[220px]">
                 <span className="text-xs font-semibold text-mgmt-on-surface-variant">Filter by date</span>
                 <div className="relative">
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -543,7 +633,10 @@ export default function AdminAppointmentsHome() {
                   <input
                     type="date"
                     value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
+                    onChange={(e) => {
+                      setDateFilter(e.target.value);
+                      resetToFirstPage();
+                    }}
                     className="block h-10 w-full rounded-lg border border-mgmt-outline-variant bg-white py-2 pr-3 pl-10 text-sm text-mgmt-on-surface shadow-sm transition-colors hover:border-mgmt-on-surface-variant/80 focus:border-mgmt-on-surface-variant focus:ring-1 focus:ring-mgmt-outline-variant focus:outline-none"
                   />
                 </div>
@@ -554,7 +647,10 @@ export default function AdminAppointmentsHome() {
                 <div className="relative">
                   <select
                     value={therapistFilter}
-                    onChange={(e) => setTherapistFilter(e.target.value)}
+                    onChange={(e) => {
+                      setTherapistFilter(e.target.value);
+                      resetToFirstPage();
+                    }}
                     className={FILTER_SELECT_CLASS}
                   >
                     <option value="">All therapists</option>
@@ -577,7 +673,10 @@ export default function AdminAppointmentsHome() {
                 <div className="relative">
                   <select
                     value={serviceFilter}
-                    onChange={(e) => setServiceFilter(e.target.value)}
+                    onChange={(e) => {
+                      setServiceFilter(e.target.value);
+                      resetToFirstPage();
+                    }}
                     className={FILTER_SELECT_CLASS}
                   >
                     <option value="">All services</option>
@@ -600,7 +699,10 @@ export default function AdminAppointmentsHome() {
                 <div className="relative">
                   <select
                     value={paymentFilter}
-                    onChange={(e) => setPaymentFilter(e.target.value)}
+                    onChange={(e) => {
+                      setPaymentFilter(e.target.value);
+                      resetToFirstPage();
+                    }}
                     className={FILTER_SELECT_CLASS}
                   >
                     <option value="">All payment methods</option>
@@ -622,10 +724,12 @@ export default function AdminAppointmentsHome() {
                 <button
                   type="button"
                   onClick={() => {
+                    setTimeScope("upcoming");
                     setDateFilter("");
                     setTherapistFilter("");
                     setServiceFilter("");
                     setPaymentFilter("");
+                    resetToFirstPage();
                   }}
                   className="h-10 shrink-0 rounded-lg px-3 text-sm font-medium text-mgmt-on-surface-variant transition-colors hover:bg-white hover:text-mgmt-on-surface"
                 >
@@ -652,7 +756,7 @@ export default function AdminAppointmentsHome() {
       <div className="min-h-0 flex-1 px-4 pb-12 sm:px-6 lg:px-8">
         {loading ? (
           <p className="py-12 text-center text-sm text-mgmt-on-surface-variant">Loading…</p>
-        ) : filteredItems.length === 0 ? (
+        ) : totalResults === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <MaterialSymbol name="event_note" className="text-5xl text-mgmt-on-surface-variant/50" />
             <p className="mt-4 text-sm font-medium text-mgmt-on-surface">No appointments</p>
@@ -682,7 +786,7 @@ export default function AdminAppointmentsHome() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-mgmt-outline-variant/10">
-                  {paginatedItems.map((item, index) => {
+                  {items.map((item, index) => {
                     const timeZone = normalizeTimeZone(item.therapist.timezone);
                     const { display } = formatAppointmentRange(item.startAt, item.endAt, timeZone);
                     const isDeleting = deletingId === item.appointmentId;
@@ -729,12 +833,15 @@ export default function AdminAppointmentsHome() {
                 page={safePage}
                 pageSize={pageSize}
                 onPageChange={setPage}
-                onPageSizeChange={setPageSize}
+                onPageSizeChange={(nextPageSize) => {
+                  setPageSize(nextPageSize);
+                  resetToFirstPage();
+                }}
               />
             </div>
 
             <div className="space-y-4 lg:hidden">
-              {paginatedItems.map((item, index) => {
+              {items.map((item, index) => {
                 const timeZone = normalizeTimeZone(item.therapist.timezone);
                 const { display } = formatAppointmentRange(item.startAt, item.endAt, timeZone);
                 const isDeleting = deletingId === item.appointmentId;
@@ -777,7 +884,10 @@ export default function AdminAppointmentsHome() {
                   page={safePage}
                   pageSize={pageSize}
                   onPageChange={setPage}
-                  onPageSizeChange={setPageSize}
+                  onPageSizeChange={(nextPageSize) => {
+                  setPageSize(nextPageSize);
+                  resetToFirstPage();
+                }}
                 />
               </div>
             </div>

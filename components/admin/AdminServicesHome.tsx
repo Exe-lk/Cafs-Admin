@@ -174,8 +174,7 @@ export default function AdminServicesHome() {
 
   const bookingPagePath = useMemo(() => {
     const slug = activeTherapist ? therapistBookingSlug(activeTherapist.name) : "book";
-    if (typeof window === "undefined") return `book/${slug}`;
-    return `${window.location.host}/book/${slug}`;
+    return `book/${slug}`;
   }, [activeTherapist]);
 
   const copyPageLink = useCallback(async () => {
