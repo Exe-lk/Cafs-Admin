@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import ServiceCategoryModal from "@/components/admin/ServiceCategoryModal";
 import {
   serviceCategoryHref,
@@ -24,6 +24,10 @@ export default function ServicesSubNav() {
   const activeCategoryId = searchParams.get("category");
   const onClasses = pathname?.startsWith("/admin/services/classes") ?? false;
   const { categories, loading, reload } = useAdminServiceCategories();
+  const totalServiceCount = useMemo(
+    () => categories.reduce((sum, category) => sum + category.count, 0),
+    [categories],
+  );
 
   /** When on the services route, user can collapse the list; on classes route the section stays closed. */
   const [servicesCollapsedByUser, setServicesCollapsedByUser] = useState(false);
@@ -60,7 +64,7 @@ export default function ServicesSubNav() {
                     : "text-mgmt-on-surface",
               )}
             >
-              <span>All services ({categories.length})</span>
+              <span>All services ({totalServiceCount})</span>
               {onClasses && (
                 <svg
                   className="h-4 w-4 shrink-0"

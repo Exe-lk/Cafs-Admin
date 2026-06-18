@@ -1,7 +1,11 @@
 import type { NextRequest } from "next/server";
 import { ok, err } from "@/lib/api/envelope";
-import { getAuthContext, requireRole } from "@/lib/api/auth";
+import { getAuthContext, requireRoleService } from "@/lib/api/auth";
 import { parseIsoDateParam } from "@/lib/api/http";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+
+const SELECT_COLUMNS =
+  "class_id,title,description,start_at,end_at,capacity,is_active,created_at,updated_at";
 
 type PutBody = {
   title?: string;
@@ -19,7 +23,7 @@ export async function PUT(
   const { classId } = await params;
   const auth = await getAuthContext(request);
   if (!auth.ok) return err("Unauthorized", 401);
-  const roleCheck = await requireRole(auth.supabase, auth.ctx.user.id, [
+  const roleCheck = await requireRoleService(auth.ctx.user.id, [
     "admin",
     "front_office",
   ]);
@@ -50,10 +54,17 @@ export async function PUT(
     payload.capacity = body.capacity === null ? null : Math.floor(body.capacity);
   if (typeof body.isActive === "boolean") payload.is_active = body.isActive;
 
-  const { error } = await auth.supabase.from("classes").update(payload).eq("class_id", classId);
+  const adminSupabase = createSupabaseServiceRoleClient();
+  const { data, error } = await adminSupabase
+    .from("classes")
+    .update(payload)
+    .eq("class_id", classId)
+    .select(SELECT_COLUMNS)
+    .maybeSingle();
   if (error) return err(error.message, 400);
+  if (!data) return err("Class not found", 404);
 
-  const res = ok(null, "Class updated successfully");
+  const res = ok(data, "Class updated successfully");
   res.headers.set("Cache-Control", "no-store");
   return res;
 }
@@ -65,20 +76,23 @@ export async function DELETE(
   const { classId } = await params;
   const auth = await getAuthContext(request);
   if (!auth.ok) return err("Unauthorized", 401);
-  const roleCheck = await requireRole(auth.supabase, auth.ctx.user.id, [
+  const roleCheck = await requireRoleService(auth.ctx.user.id, [
     "admin",
     "front_office",
   ]);
   if (!roleCheck.ok) return err("Forbidden", 403);
 
-  const { error } = await auth.supabase
+  const adminSupabase = createSupabaseServiceRoleClient();
+  const { data, error } = await adminSupabase
     .from("classes")
     .update({ is_active: false, updated_at: new Date().toISOString() })
-    .eq("class_id", classId);
+    .eq("class_id", classId)
+    .select("class_id")
+    .maybeSingle();
   if (error) return err(error.message, 400);
+  if (!data) return err("Class not found", 404);
 
   const res = ok(null, "Class deleted successfully");
   res.headers.set("Cache-Control", "no-store");
   return res;
 }
-

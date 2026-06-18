@@ -1,11 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import ConfirmationModal from "@/components/admin/ConfirmationModal";
+import EditServiceModal, { type EditServiceModalService } from "@/components/admin/EditServiceModal";
 import EditTherapistServiceModal, {
   type EditTherapistServiceModalItem,
 } from "@/components/admin/EditTherapistServiceModal";
 import ListItemActionsMenu from "@/components/admin/ListItemActionsMenu";
+import { useAdminServiceCategories } from "@/components/admin/useAdminServiceCategories";
+import { notifyServiceCategoriesReload } from "@/components/admin/serviceCategories";
 
 type ServiceItem = EditTherapistServiceModalItem & {
   highlighted?: boolean;
@@ -14,48 +19,20 @@ type ServiceItem = EditTherapistServiceModalItem & {
 
 type ServiceModalState = "closed" | "create" | ServiceItem;
 
-const PLACEHOLDER_SERVICES: ServiceItem[] = [
-  {
-    id: "svc-001",
-    title: "Couples Therapy(Online)",
-    therapistName: "Dr. Anjali Perera",
-    meta: "60 mins · Rs 4,500",
-    categoryId: "cat-couples",
-    therapistId: "th-001",
-    description: "Online couples counselling focused on communication and conflict resolution.",
-    highlighted: true,
-  },
-  {
-    id: "svc-002",
-    title: "Individual Therapy(In-person)",
-    therapistName: "Dr. Ruwan Silva",
-    meta: "50 mins · Rs 3,500",
-    categoryId: "cat-individual",
-    therapistId: "th-002",
-    description: "One-on-one in-clinic session for anxiety, stress, and emotional wellbeing.",
-    highlighted: false,
-  },
-  {
-    id: "svc-003",
-    title: "Psychological Assessment(Online)",
-    therapistName: "Ms. Nethmi Fernando",
-    meta: "90 mins · Rs 6,000",
-    categoryId: "cat-assessment",
-    therapistId: "th-003",
-    description: "Structured online assessment with follow-up recommendations.",
-    highlighted: false,
-  },
-  {
-    id: "svc-004",
-    title: "Group Session(In-person)",
-    therapistName: "Dr. Anjali Perera",
-    meta: "75 mins · Rs 2,500",
-    categoryId: "cat-group",
-    therapistId: "th-001",
-    description: "Small-group therapeutic session for peer support and guided exercises.",
-    highlighted: false,
-  },
-];
+function formatPriceLkr(value: unknown): string {
+  if (value == null || value === "") return "—";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return `Rs ${n.toLocaleString("en-LK")}`;
+}
+
+function formatServiceMeta(durationMinutes: unknown, priceLkr: unknown): string {
+  const mins =
+    typeof durationMinutes === "number" && Number.isFinite(durationMinutes)
+      ? `${Math.floor(durationMinutes)} mins`
+      : "—";
+  return `${mins} · ${formatPriceLkr(priceLkr)}`;
+}
 
 function serviceDisplayTitle(service: ServiceItem) {
   return `${service.title} by ${service.therapistName}`;
@@ -134,7 +111,31 @@ function ClockIcon({ className }: { className?: string }) {
   );
 }
 
+function formatServiceTypeMeta(row: Record<string, unknown>): string {
+  const mins = Number(row.default_duration_minutes ?? 60);
+  const price =
+    row.base_price_lkr == null ? "Free" : `LKR ${Number(row.base_price_lkr).toLocaleString()}`;
+  return `${mins} mins · ${price}`;
+}
+
+function mapServiceTypeToModalItem(row: Record<string, unknown>): EditServiceModalService {
+  return {
+    id: String(row.service_id ?? ""),
+    title: String(row.name ?? "—"),
+    meta: formatServiceTypeMeta(row),
+  };
+}
+
 export default function AdminServicesHome() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeCategoryId = searchParams.get("category")?.trim() || "";
+  const { categories, reload: reloadCategories } = useAdminServiceCategories();
+  const activeCategory = useMemo(
+    () => categories.find((category) => category.id === activeCategoryId) ?? null,
+    [categories, activeCategoryId],
+  );
+  const pageHeading = activeCategory?.label ?? "Services";
   const [therapistFilter, setTherapistFilter] = useState("");
   const [therapistMenuOpen, setTherapistMenuOpen] = useState(false);
   const therapistMenuRef = useRef<HTMLDivElement>(null);
@@ -142,9 +143,164 @@ export default function AdminServicesHome() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pageLinkCopied, setPageLinkCopied] = useState(false);
   const [serviceModal, setServiceModal] = useState<ServiceModalState>("closed");
-  const [services, setServices] = useState<ServiceItem[]>(PLACEHOLDER_SERVICES);
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [actionsMenuId, setActionsMenuId] = useState<string | null>(null);
   const [hiddenById, setHiddenById] = useState<Record<string, boolean>>({});
+  const [serviceTypeCatalog, setServiceTypeCatalog] = useState<
+    Record<string, EditServiceModalService>
+  >({});
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const [categoryEditOpen, setCategoryEditOpen] = useState(false);
+  const [categoryDeleteOpen, setCategoryDeleteOpen] = useState(false);
+  const categoryMenuRef = useRef<HTMLDivElement>(null);
+
+  // Category edit/delete targets `services` rows (service types), not therapist_services.
+  const categoryServiceForModal = useMemo(() => {
+    if (!activeCategoryId) return null;
+    return serviceTypeCatalog[activeCategoryId] ?? null;
+  }, [activeCategoryId, serviceTypeCatalog]);
+
+  const reload = useCallback(() => {
+    const ac = new AbortController();
+    setLoading(true);
+    setErrorMsg(null);
+    (async () => {
+      try {
+        const therapistServicesParams = new URLSearchParams({
+          isActive: "true",
+          includeService: "true",
+        });
+        if (activeCategoryId) {
+          therapistServicesParams.set("categoryId", activeCategoryId);
+        }
+
+        const [therapistServicesRes, servicesRes, therapistsRes] = await Promise.all([
+          fetch(`/api/v1/admin/therapist-services?${therapistServicesParams.toString()}`, {
+            method: "GET",
+            cache: "no-store",
+            signal: ac.signal,
+          }),
+          fetch("/api/v1/admin/services", {
+            method: "GET",
+            cache: "no-store",
+            signal: ac.signal,
+          }),
+          fetch("/api/v1/admin/therapists", {
+            method: "GET",
+            cache: "no-store",
+            signal: ac.signal,
+          }),
+        ]);
+
+        const therapistServicesJson = (await therapistServicesRes.json()) as {
+          status?: string;
+          message?: string;
+          data?: { items?: Array<Record<string, unknown>> };
+        };
+        const servicesJson = (await servicesRes.json()) as {
+          status?: string;
+          data?: { items?: Array<Record<string, unknown>> };
+        };
+        const therapistsJson = (await therapistsRes.json()) as {
+          status?: string;
+          data?: { items?: Array<Record<string, unknown>> };
+        };
+
+        if (
+          !therapistServicesRes.ok ||
+          therapistServicesJson?.status !== "success" ||
+          !therapistServicesJson?.data
+        ) {
+          throw new Error(
+            therapistServicesJson?.message ||
+              `Failed to load therapist services (HTTP ${therapistServicesRes.status})`,
+          );
+        }
+
+        const serviceNameById = new Map<string, string>();
+        const serviceDescriptionById = new Map<string, string>();
+        const nextServiceTypeCatalog: Record<string, EditServiceModalService> = {};
+        for (const row of servicesJson.data?.items ?? []) {
+          const id = String(row.service_id ?? "");
+          if (!id) continue;
+          serviceNameById.set(id, String(row.name ?? "—"));
+          nextServiceTypeCatalog[id] = mapServiceTypeToModalItem(row);
+          if (typeof row.description === "string" && row.description.trim()) {
+            serviceDescriptionById.set(id, row.description.trim());
+          }
+        }
+        setServiceTypeCatalog(nextServiceTypeCatalog);
+
+        const therapistNameById = new Map<string, string>();
+        for (const row of therapistsJson.data?.items ?? []) {
+          const id = String(row.therapist_id ?? "");
+          if (!id) continue;
+          const profiles = row.profiles as { full_name?: string | null } | null | undefined;
+          therapistNameById.set(id, String(profiles?.full_name ?? "—").trim() || "—");
+        }
+
+        const next: ServiceItem[] = (therapistServicesJson.data.items ?? []).map((row) => {
+          const serviceId = String(row.service_id ?? "");
+          const therapistId = String(row.therapist_id ?? "");
+          const joinedService = row.service as
+            | { name?: string | null; description?: string | null }
+            | null
+            | undefined;
+          const title =
+            (typeof joinedService?.name === "string" && joinedService.name.trim()) ||
+            serviceNameById.get(serviceId) ||
+            "—";
+          const description =
+            (typeof joinedService?.description === "string" && joinedService.description.trim()) ||
+            serviceDescriptionById.get(serviceId);
+          return {
+            id: String(row.therapist_service_id ?? ""),
+            title,
+            therapistName: therapistNameById.get(therapistId) ?? "—",
+            meta: formatServiceMeta(row.duration_minutes, row.price_lkr),
+            categoryId: serviceId || undefined,
+            therapistId: therapistId || undefined,
+            description,
+          };
+        });
+        setServices(next.filter((item) => item.id));
+      } catch (e) {
+        if ((e as { name?: string })?.name === "AbortError") return;
+        setErrorMsg(e instanceof Error ? e.message : "Failed to load services");
+        setServices([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+    return () => ac.abort();
+  }, [activeCategoryId]);
+
+  useEffect(() => {
+    const cleanup = reload();
+    return cleanup;
+  }, [reload]);
+
+  useEffect(() => {
+    setTherapistFilter("");
+    setSearch("");
+    setActionsMenuId(null);
+    setCategoryMenuOpen(false);
+    setCategoryEditOpen(false);
+    setCategoryDeleteOpen(false);
+  }, [activeCategoryId]);
+
+  useEffect(() => {
+    if (!categoryMenuOpen) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (categoryMenuRef.current && !categoryMenuRef.current.contains(e.target as Node)) {
+        setCategoryMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [categoryMenuOpen]);
 
   const therapistOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -217,30 +373,112 @@ export default function AdminServicesHome() {
     >
       {serviceModal !== "closed" ? (
         <EditTherapistServiceModal
-          key={serviceModal === "create" ? "new-therapist-service" : serviceModal.id}
+          key={
+            serviceModal === "create"
+              ? `new-therapist-service-${activeCategoryId || "all"}`
+              : serviceModal.id
+          }
           service={serviceModal === "create" ? null : serviceModal}
+          defaultCategoryId={activeCategoryId || undefined}
           onClose={() => setServiceModal("closed")}
-          onSaved={() => setServiceModal("closed")}
+          onSaved={() => {
+            setServiceModal("closed");
+            reload();
+          }}
+        />
+      ) : null}
+
+      {categoryEditOpen && categoryServiceForModal ? (
+        <EditServiceModal
+          key={categoryServiceForModal.id}
+          service={categoryServiceForModal}
+          onClose={() => setCategoryEditOpen(false)}
+          onSaved={() => {
+            setCategoryEditOpen(false);
+            reload();
+            reloadCategories();
+            notifyServiceCategoriesReload();
+          }}
+        />
+      ) : null}
+
+      {categoryDeleteOpen && activeCategory ? (
+        <ConfirmationModal
+          title="Delete category"
+          description={`Are you sure you want to delete "${activeCategory.label}"? This cannot be undone.`}
+          confirmLabel="Yes, delete"
+          onClose={() => setCategoryDeleteOpen(false)}
+          onConfirm={async () => {
+            const res = await fetch(
+              `/api/v1/admin/services/${encodeURIComponent(activeCategoryId)}`,
+              { method: "DELETE", cache: "no-store" },
+            );
+            const json = (await res.json()) as { status?: string; message?: string };
+            if (!res.ok || json?.status !== "success") {
+              setErrorMsg(json?.message || `Delete failed (HTTP ${res.status})`);
+              return;
+            }
+            setCategoryDeleteOpen(false);
+            reloadCategories();
+            notifyServiceCategoriesReload();
+            router.push("/admin/services");
+          }}
         />
       ) : null}
 
       <header className="sticky top-12 z-10 flex shrink-0 items-center justify-between gap-3 bg-mgmt-surface-container-lowest px-4 py-5 sm:top-0 sm:px-6 lg:px-8 lg:py-6">
-        <h1 className="min-w-0 truncate text-xl font-bold text-mgmt-on-surface sm:text-2xl">Services</h1>
+        <h1 className="min-w-0 truncate text-xl font-bold text-mgmt-on-surface sm:text-2xl">
+          {pageHeading}
+        </h1>
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            className="rounded-lg p-2 text-mgmt-on-surface-variant transition-colors hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface"
-            aria-label="Share booking page"
-          >
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-              />
-            </svg>
-          </button>
+          {activeCategoryId ? (
+            <div className="relative" ref={categoryMenuRef}>
+              <button
+                type="button"
+                onClick={() => setCategoryMenuOpen((open) => !open)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container-low"
+                aria-label="Category options"
+                aria-haspopup="menu"
+                aria-expanded={categoryMenuOpen}
+              >
+                <MaterialSymbol name="more_vert" className="text-[22px]" />
+              </button>
+
+              {categoryMenuOpen ? (
+                <div
+                  className="absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-xl border border-mgmt-outline-variant/20 bg-white py-1 shadow-lg"
+                  role="menu"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={!categoryServiceForModal}
+                    onClick={() => {
+                      if (!categoryServiceForModal) return;
+                      setCategoryMenuOpen(false);
+                      setCategoryEditOpen(true);
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-mgmt-on-surface hover:bg-mgmt-surface-container-low disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <MaterialSymbol name="edit" className="text-[20px] text-mgmt-on-surface-variant" />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setCategoryMenuOpen(false);
+                      setCategoryDeleteOpen(true);
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 hover:bg-mgmt-surface-container-low"
+                  >
+                    <MaterialSymbol name="delete" className="text-[20px]" />
+                    Delete
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <button
             type="button"
             onClick={() => setServiceModal("create")}
@@ -255,6 +493,11 @@ export default function AdminServicesHome() {
       </header>
 
       <div className="px-4 pb-5 sm:px-6 lg:px-8">
+        {errorMsg ? (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {errorMsg}
+          </div>
+        ) : null}
         <div
           className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4"
           data-purpose="filters"
@@ -384,6 +627,7 @@ export default function AdminServicesHome() {
       </div>
 
       <div className="space-y-4 px-4 pb-8 sm:px-6 lg:px-8" data-purpose="services-list">
+        {loading ? <p className="text-sm text-mgmt-on-surface-variant">Loading…</p> : null}
         {filtered.map((service) => (
           <div
             key={service.id}
@@ -432,9 +676,21 @@ export default function AdminServicesHome() {
                 onHiddenChange={(hidden) =>
                   setHiddenById((prev) => ({ ...prev, [service.id]: hidden }))
                 }
-                onDelete={() => {
+                onDelete={async () => {
                   if (!window.confirm(`Delete "${serviceDisplayTitle(service)}"?`)) return;
-                  setServices((prev) => prev.filter((s) => s.id !== service.id));
+                  try {
+                    const res = await fetch(
+                      `/api/v1/admin/therapist-services/${encodeURIComponent(service.id)}`,
+                      { method: "DELETE", cache: "no-store" },
+                    );
+                    const json = (await res.json()) as { status?: string; message?: string };
+                    if (!res.ok || json?.status !== "success") {
+                      throw new Error(json?.message || `Delete failed (HTTP ${res.status})`);
+                    }
+                    reload();
+                  } catch (e) {
+                    setErrorMsg(e instanceof Error ? e.message : "Failed to delete service");
+                  }
                   setHiddenById((prev) => {
                     const next = { ...prev };
                     delete next[service.id];
@@ -445,8 +701,14 @@ export default function AdminServicesHome() {
             </div>
           </div>
         ))}
-        {filtered.length === 0 ? (
-          <p className="text-sm text-mgmt-on-surface-variant">No services match your search.</p>
+        {filtered.length === 0 && !loading ? (
+          <p className="text-sm text-mgmt-on-surface-variant">
+            {search.trim() || therapistFilter
+              ? "No services match your search."
+              : activeCategoryId
+                ? `No services in ${activeCategory?.label ?? "this category"} yet.`
+                : "No services yet."}
+          </p>
         ) : null}
       </div>
     </main>
