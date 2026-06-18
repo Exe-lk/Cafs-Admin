@@ -117,7 +117,7 @@ export default function EditServiceModal({ service, onClose, onSaved }: Props) {
           <header className="flex items-start gap-4 border-b border-mgmt-outline-variant/20 px-8 py-6">
             <div className="flex-1">
               <h2 id={titleId} className="text-xl font-bold text-mgmt-on-surface">
-                {isCreate ? "New service" : "Edit service"}
+                {isCreate ? "New service category" : "Edit service category"}
               </h2>
               <p className="mt-1 text-sm text-mgmt-on-surface-variant">
                 Configure service duration, pricing and payments for booking.
@@ -141,11 +141,11 @@ export default function EditServiceModal({ service, onClose, onSaved }: Props) {
             ) : null}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
-                <label className={labelClass}>Service name</label>
+                <label className={labelClass}>Service category name</label>
                 <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputClass} />
               </div>
 
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <label className={labelClass}>Duration</label>
                 <input value={duration} onChange={(e) => setDuration(e.target.value)} className={inputClass} />
               </div>
@@ -153,7 +153,7 @@ export default function EditServiceModal({ service, onClose, onSaved }: Props) {
               <div className="space-y-2">
                 <label className={labelClass}>Cost</label>
                 <input value={cost} onChange={(e) => setCost(e.target.value)} className={inputClass} />
-              </div>
+              </div> */}
 
               <div className="space-y-2 md:col-span-2">
                 <label className={labelClass}>Provider</label>
@@ -163,11 +163,11 @@ export default function EditServiceModal({ service, onClose, onSaved }: Props) {
               </div>
             </div>
 
-            <div className="mt-10">
-              <h3 className="text-sm font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
+            <div className="mt-1">
+              {/* <h3 className="text-sm font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
                 Payments
-              </h3>
-              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              </h3> */}
+              {/* <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => setPayment("Stripe")}
@@ -201,7 +201,7 @@ export default function EditServiceModal({ service, onClose, onSaved }: Props) {
                   </div>
                   {payment === "PayPal" && <MaterialSymbol name="check_circle" className="text-mgmt-primary" filled />}
                 </button>
-              </div>
+              </div> */}
             </div>
           </div>
 

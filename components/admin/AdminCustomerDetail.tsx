@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import ConfirmationModal from "@/components/admin/ConfirmationModal";
 import AdminCustomerFormDetailsTab from "@/components/admin/AdminCustomerFormDetailsTab";
 import CreateAppointmentModal from "@/components/admin/CreateAppointmentModal";
 import CustomerAppointmentUpdatesPanel from "@/components/admin/CustomerAppointmentUpdatesPanel";
 import EditCustomerModal, { type AdminCustomerProfile } from "@/components/admin/EditCustomerModal";
+import ProfileAvatarUpload from "@/components/admin/ProfileAvatarUpload";
 import EditAppointmentModal, {
   type AdminEditableAppointment,
 } from "@/components/admin/EditAppointmentModal";
@@ -75,11 +77,6 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function avatarInitial(name: string) {
-  const t = name.trim();
-  return t ? t[0]!.toUpperCase() : "?";
-}
-
 function firstName(name: string) {
   const t = name.trim();
   if (!t) return "this client";
@@ -126,10 +123,11 @@ export default function AdminCustomerDetail({
 }: {
   customer: AdminCustomerModel;
   onUpdateCustomer: (next: AdminCustomerModel) => void;
-  onDeleteCustomer?: (customerId: string) => void;
+  onDeleteCustomer?: (customerId: string) => void | Promise<void>;
   onPersistProfile?: (args: { clientId: string; fullName: string; phone: string }) => Promise<void>;
 }) {
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [bookAppointmentOpen, setBookAppointmentOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -139,6 +137,7 @@ export default function AdminCustomerDetail({
   const [sessionNoteHistory, setSessionNoteHistory] = useState<AdminCustomerNoteHistoryItem[]>(
     [],
   );
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [editingAppt, setEditingAppt] = useState<AdminEditableAppointment | null>(null);
   const [formSheet, setFormSheet] = useState<unknown>(null);
   const [formSheetLoading, setFormSheetLoading] = useState(false);
@@ -240,16 +239,13 @@ export default function AdminCustomerDetail({
       <div className="shrink-0 px-6 pt-6 sm:px-8 sm:pt-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 flex-1 items-center gap-4 sm:gap-6">
-            {customer.avatarUrl ? (
-              <div className="h-24 w-24 shrink-0 overflow-hidden rounded-full bg-[#E7E7E7]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={customer.avatarUrl} alt="" className="h-full w-full object-cover" />
-              </div>
-            ) : (
-              <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-[#E7E7E7] text-4xl font-bold text-[#5F5F5F]">
-                {avatarInitial(customer.fullName)}
-              </div>
-            )}
+            <ProfileAvatarUpload
+              imageUrl={customer.avatarUrl}
+              alt={customer.fullName}
+              onImageChange={(avatarUrl) => {
+                onUpdateCustomer({ ...customer, avatarUrl });
+              }}
+            />
             <div className="min-w-0">
               <h3 className="truncate text-[1.6rem] font-bold tracking-tight text-mgmt-on-background sm:text-[2rem]">
                 {customer.fullName}
@@ -312,10 +308,8 @@ export default function AdminCustomerDetail({
                     role="menuitem"
                     onClick={() => {
                       setMoreMenuOpen(false);
-                      const ok = window.confirm(
-                        `Delete customer "${customer.fullName}"? This cannot be undone.`,
-                      );
-                      if (ok) onDeleteCustomer?.(customer.id);
+                      setDeleteError(null);
+                      setDeleteConfirmOpen(true);
                     }}
                     className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 hover:bg-mgmt-surface-container-low"
                   >
@@ -723,8 +717,8 @@ export default function AdminCustomerDetail({
           }}
           onDelete={
             onDeleteCustomer
-              ? (customerId) => {
-                  onDeleteCustomer(customerId);
+              ? async (customerId) => {
+                  await onDeleteCustomer(customerId);
                 }
               : undefined
           }
@@ -788,6 +782,33 @@ export default function AdminCustomerDetail({
             onUpdateCustomer({ ...customer, appointmentDays: updatedDays });
             setUpdatesReloadKey((k) => k + 1);
             setEditingAppt(null);
+          }}
+        />
+      ) : null}
+
+      {deleteConfirmOpen && onDeleteCustomer ? (
+        <ConfirmationModal
+          title="Delete customer"
+          description={
+            deleteError ??
+            `Are you sure you want to delete "${customer.fullName}"? This cannot be undone.`
+          }
+          confirmLabel="Yes, delete"
+          disableDismiss={Boolean(deleteError)}
+          onClose={() => {
+            setDeleteConfirmOpen(false);
+            setDeleteError(null);
+          }}
+          onConfirm={async () => {
+            try {
+              setDeleteError(null);
+              await onDeleteCustomer(customer.id);
+              setDeleteConfirmOpen(false);
+            } catch (e) {
+              setDeleteError(
+                e instanceof Error ? e.message : "Failed to delete customer",
+              );
+            }
           }}
         />
       ) : null}

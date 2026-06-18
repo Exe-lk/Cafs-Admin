@@ -49,7 +49,7 @@ const NAV_ENTRIES: NavEntry[] = [
     icon: "calendar_today",
     children: [{ href: "/admin/appointments", label: "Appointments", icon: "event_note" }],
   },
-  { kind: "link", href: "/admin/service-types", label: "Service Categories", icon: "bookmarks" },
+  // { kind: "link", href: "/admin/service-types", label: "Service Categories", icon: "bookmarks" },
   { kind: "link", href: "/admin/services", label: "Services", icon: "format_list_bulleted" },
   { kind: "link", href: "/admin/customers", label: "Customers", icon: "sentiment_satisfied" },
   { kind: "link", href: "/admin/theraphist", label: "Therapists", icon: "stethoscope" },

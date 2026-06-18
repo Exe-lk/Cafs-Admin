@@ -62,6 +62,10 @@ export type AdminEditableAppointment = {
 };
 
 const MIN_REJECT_REASON_LEN = 3;
+const MAX_REJECT_REASON_LEN = 500;
+const MAX_VIDEO_LINK_LEN = 2048;
+const MAX_APPOINTMENT_TITLE_LEN = 200;
+const MAX_APPOINTMENT_NOTES_LEN = 2000;
 
 const FIELD_SELECT_CLASS =
   "mt-1 h-10 w-full appearance-none rounded-lg border border-mgmt-outline-variant/20 bg-mgmt-surface-container-low py-2 pl-3 pr-9 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90";
@@ -437,6 +441,7 @@ export default function EditAppointmentModal({
                   value={draft.title}
                   readOnly={effectiveReadOnly}
                   disabled={effectiveReadOnly}
+                  maxLength={MAX_APPOINTMENT_TITLE_LEN}
                   onChange={(e) => setDraft((p) => ({ ...p, title: e.target.value }))}
                   className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="Appointment title…"
@@ -545,6 +550,7 @@ export default function EditAppointmentModal({
                   value={draft.videoLink ?? ""}
                   readOnly={effectiveReadOnly}
                   disabled={effectiveReadOnly}
+                  maxLength={MAX_VIDEO_LINK_LEN}
                   onChange={(e) => setDraft((p) => ({ ...p, videoLink: e.target.value }))}
                   className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="Paste meeting URL…"
@@ -598,6 +604,7 @@ export default function EditAppointmentModal({
                   value={draft.notes ?? ""}
                   readOnly={effectiveReadOnly}
                   disabled={effectiveReadOnly}
+                  maxLength={MAX_APPOINTMENT_NOTES_LEN}
                   onChange={(e) => setDraft((p) => ({ ...p, notes: e.target.value }))}
                   className="mt-1 min-h-24 w-full resize-none rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="Type notes…"
@@ -887,12 +894,13 @@ export default function EditAppointmentModal({
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               disabled={rejectSubmitting}
+              maxLength={MAX_REJECT_REASON_LEN}
               className="mt-1 min-h-28 w-full resize-none rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:opacity-60"
               placeholder="Explain why this appointment cannot be confirmed…"
               autoFocus
             />
             <p className="mt-1 text-xs text-mgmt-on-surface-variant">
-              At least {MIN_REJECT_REASON_LEN} characters required.
+              {MIN_REJECT_REASON_LEN}–{MAX_REJECT_REASON_LEN} characters required.
             </p>
             <div className="mt-5 flex justify-end gap-3">
               <button

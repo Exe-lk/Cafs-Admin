@@ -2,7 +2,9 @@
 
 import { useEffect, useId, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import ConfirmationModal from "@/components/admin/ConfirmationModal";
 import { useAdminTherapists } from "@/components/admin/useAdminTherapists";
+import { formatApiErrorMessage } from "@/lib/api/formatApiError";
 
 export type EditTherapistServiceModalItem = {
   id: string;
@@ -10,10 +12,22 @@ export type EditTherapistServiceModalItem = {
   meta: string;
   categoryId?: string;
   therapistId?: string;
+  /** Raw API values — preferred over parsing `meta` when editing. */
+  durationMinutes?: number;
+  priceLkr?: number;
   description?: string;
 };
 
 type ServiceOption = { id: string; label: string; description?: string };
+
+const DURATION_MIN = 10;
+const DURATION_MAX = 1000;
+const PRICE_MIN = 100;
+const PRICE_MAX = 100_000;
+
+function digitsOnly(value: string, maxDigits: number): string {
+  return value.replace(/\D/g, "").slice(0, maxDigits);
+}
 
 function parseMeta(meta: string): { duration: string; costLabel: string } {
   const parts = meta.split("·").map((p) => p.trim());
@@ -32,20 +46,80 @@ function parseDurationMinutes(input: string): number | null {
 
 function parsePriceLkr(input: string): number | null {
   const t = input.trim().toLowerCase();
-  if (!t || t.includes("free") || t === "rs 0") return 0;
-  const m = t.replace(/,/g, "").match(/(\d+(?:\.\d{1,2})?)/);
+  if (!t || t.includes("free") || t === "—") return null;
+  const m = t.replace(/,/g, "").match(/(\d+)/);
   if (!m) return null;
-  const n = Number(m[1]);
-  return Number.isFinite(n) && n >= 0 ? n : null;
+  const n = Number.parseInt(m[1]!, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toWholeNumber(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.floor(n);
+}
+
+function initialDuration(service: EditTherapistServiceModalItem | null): string {
+  const fromApi = toWholeNumber(service?.durationMinutes);
+  if (fromApi != null && fromApi > 0) return String(fromApi);
+  return durationFromMeta(parseMeta(service?.meta ?? "").duration);
+}
+
+function initialCost(service: EditTherapistServiceModalItem | null): string {
+  const fromApi = toWholeNumber(service?.priceLkr);
+  if (fromApi != null && fromApi > 0) return String(fromApi);
+  const fromMeta = priceFromMeta(parseMeta(service?.meta ?? "").costLabel);
+  return fromMeta;
+}
+
+function durationFromMeta(meta: string): string {
+  const n = parseDurationMinutes(meta);
+  return n != null ? String(n) : "";
+}
+
+function priceFromMeta(costLabel: string): string {
+  const n = parsePriceLkr(costLabel);
+  return n != null && n > 0 ? String(n) : "";
+}
+
+function validateDurationValue(value: string): string | null {
+  if (!value.trim()) return "Duration is required.";
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n)) return "Enter a valid duration.";
+  if (n < DURATION_MIN || n > DURATION_MAX) {
+    return `Duration must be between ${DURATION_MIN} and ${DURATION_MAX} minutes.`;
+  }
+  return null;
+}
+
+function validatePriceValue(value: string): string | null {
+  if (!value.trim()) return "Cost is required.";
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n)) return "Enter a valid cost.";
+  if (n < PRICE_MIN || n > PRICE_MAX) {
+    return `Cost must be between Rs. ${PRICE_MIN.toLocaleString("en-LK")} and Rs. ${PRICE_MAX.toLocaleString("en-LK")}.`;
+  }
+  return null;
 }
 
 const inputClass =
   "h-12 w-full rounded-xl border-none bg-mgmt-surface-container-low px-4 text-mgmt-on-surface transition-all focus:bg-mgmt-surface-container-lowest focus:ring-2 focus:ring-mgmt-primary/20 focus:outline-none";
 
-const textareaClass =
-  "min-h-[120px] w-full resize-y rounded-xl border-none bg-mgmt-surface-container-low px-4 py-3 text-mgmt-on-surface transition-all focus:bg-mgmt-surface-container-lowest focus:ring-2 focus:ring-mgmt-primary/20 focus:outline-none";
-
 const labelClass = "text-sm font-semibold text-mgmt-on-surface";
+
+const prefixInputWrapClass =
+  "flex h-12 overflow-hidden rounded-xl border-none bg-mgmt-surface-container-low ring-1 ring-transparent transition-all focus-within:bg-mgmt-surface-container-lowest focus-within:ring-2 focus-within:ring-mgmt-primary/20";
+
+const prefixLabelClass =
+  "flex shrink-0 items-center border-r border-mgmt-outline-variant/25 bg-mgmt-surface-container-low px-3 text-sm font-medium text-mgmt-on-surface-variant";
+
+const prefixInputClass =
+  "min-w-0 flex-1 bg-transparent px-4 text-sm text-mgmt-on-surface outline-none disabled:opacity-60";
+
+const fieldHintClass = "text-xs text-mgmt-on-surface-variant";
+
+const fieldErrorClass = "text-xs text-red-600";
 
 type Props = {
   /** When `null`, the modal opens in “add new service” mode with empty defaults. */
@@ -64,19 +138,22 @@ export default function EditTherapistServiceModal({
 }: Props) {
   const isCreate = service === null;
   const titleId = useId();
-  const parsed = parseMeta(service?.meta ?? "");
 
   const [categoryId, setCategoryId] = useState(
     () => service?.categoryId ?? defaultCategoryId ?? "",
   );
   const [therapistId, setTherapistId] = useState(() => service?.therapistId ?? "");
-  const [duration, setDuration] = useState(() => parsed.duration);
-  const [cost, setCost] = useState(() => parsed.costLabel);
-  const [description, setDescription] = useState(() => service?.description ?? "");
+  const [duration, setDuration] = useState(() => initialDuration(service));
+  const [cost, setCost] = useState(() => initialCost(service));
+  const [fieldErrors, setFieldErrors] = useState<{
+    duration?: string;
+    cost?: string;
+  }>({});
   const [serviceOptions, setServiceOptions] = useState<ServiceOption[]>([]);
   const [servicesLoading, setServicesLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const { therapists, loading: therapistsLoading } = useAdminTherapists();
 
@@ -145,10 +222,8 @@ export default function EditTherapistServiceModal({
     };
   }, []);
 
-  async function onDelete() {
+  async function confirmDelete() {
     if (isCreate || !service) return;
-    const ok = window.confirm("Delete this service?");
-    if (!ok) return;
     setSubmitting(true);
     setErrorMsg(null);
     try {
@@ -156,10 +231,17 @@ export default function EditTherapistServiceModal({
         `/api/v1/admin/therapist-services/${encodeURIComponent(service.id)}`,
         { method: "DELETE", cache: "no-store" },
       );
-      const json = (await res.json()) as { status?: string; message?: string };
+      const json = (await res.json()) as {
+        status?: string;
+        message?: string;
+        errors?: Array<{ field?: string; message?: string }>;
+      };
       if (!res.ok || json?.status !== "success") {
-        throw new Error(json?.message || `Delete failed (HTTP ${res.status})`);
+        throw new Error(
+          formatApiErrorMessage(json, `Delete failed (HTTP ${res.status})`),
+        );
       }
+      setDeleteConfirmOpen(false);
       onSaved?.();
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Failed to delete service");
@@ -171,19 +253,23 @@ export default function EditTherapistServiceModal({
   async function onSave() {
     if (!canSave) return;
 
-    const durationMinutes = parseDurationMinutes(duration);
-    const priceLkr = parsePriceLkr(cost);
-    if (durationMinutes === null) {
-      setErrorMsg("Invalid duration");
-      return;
-    }
-    if (priceLkr === null) {
-      setErrorMsg("Invalid cost");
+    const durationError = validateDurationValue(duration);
+    const costError = validatePriceValue(cost);
+    if (durationError || costError) {
+      setFieldErrors({
+        duration: durationError ?? undefined,
+        cost: costError ?? undefined,
+      });
+      setErrorMsg(durationError ?? costError ?? "Please fix the highlighted fields.");
       return;
     }
 
+    const durationMinutes = Number.parseInt(duration, 10);
+    const priceLkr = Number.parseInt(cost, 10);
+
     setSubmitting(true);
     setErrorMsg(null);
+    setFieldErrors({});
     try {
       const payload = {
         therapistId,
@@ -207,9 +293,13 @@ export default function EditTherapistServiceModal({
             body: JSON.stringify(payload),
           });
 
-      const json = (await res.json()) as { status?: string; message?: string };
+      const json = (await res.json()) as {
+        status?: string;
+        message?: string;
+        errors?: Array<{ field?: string; message?: string }>;
+      };
       if (!res.ok || json?.status !== "success") {
-        throw new Error(json?.message || `Save failed (HTTP ${res.status})`);
+        throw new Error(formatApiErrorMessage(json, `Save failed (HTTP ${res.status})`));
       }
       onSaved?.();
     } catch (e) {
@@ -224,6 +314,8 @@ export default function EditTherapistServiceModal({
       therapistId &&
       duration.trim() &&
       cost.trim() &&
+      !validateDurationValue(duration) &&
+      !validatePriceValue(cost) &&
       !submitting &&
       !servicesLoading &&
       !therapistsLoading,
@@ -274,16 +366,7 @@ export default function EditTherapistServiceModal({
                 <select
                   id="therapist-service-category"
                   value={categoryId}
-                  onChange={(e) => {
-                    const nextId = e.target.value;
-                    setCategoryId(nextId);
-                    if (isCreate) {
-                      const match = serviceOptions.find((s) => s.id === nextId);
-                      if (match?.description && !description.trim()) {
-                        setDescription(match.description);
-                      }
-                    }
-                  }}
+                  onChange={(e) => setCategoryId(e.target.value)}
                   disabled={servicesLoading}
                   className={inputClass}
                 >
@@ -330,28 +413,69 @@ export default function EditTherapistServiceModal({
                 <label className={labelClass} htmlFor="therapist-service-duration">
                   Duration
                 </label>
-                <input
-                  id="therapist-service-duration"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  className={inputClass}
-                  placeholder="60 mins"
-                />
+                <div className={prefixInputWrapClass}>
+                  <span className={prefixLabelClass}>mins</span>
+                  <input
+                    id="therapist-service-duration"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={duration}
+                    onChange={(e) => {
+                      setDuration(digitsOnly(e.target.value, 4));
+                      setFieldErrors((prev) => ({ ...prev, duration: undefined }));
+                    }}
+                    onBlur={() => {
+                      const message = validateDurationValue(duration);
+                      setFieldErrors((prev) => ({ ...prev, duration: message ?? undefined }));
+                    }}
+                    className={prefixInputClass}
+                    placeholder="60"
+                    aria-invalid={Boolean(fieldErrors.duration)}
+                    aria-describedby="therapist-service-duration-hint"
+                  />
+                </div>
+                <p id="therapist-service-duration-hint" className={fieldHintClass}>
+                  {DURATION_MIN}–{DURATION_MAX} minutes
+                </p>
+                {fieldErrors.duration ? (
+                  <p className={fieldErrorClass}>{fieldErrors.duration}</p>
+                ) : null}
               </div>
 
               <div className="space-y-2">
                 <label className={labelClass} htmlFor="therapist-service-cost">
                   Cost
                 </label>
-                <input
-                  id="therapist-service-cost"
-                  value={cost}
-                  onChange={(e) => setCost(e.target.value)}
-                  className={inputClass}
-                  placeholder="Rs 3,500"
-                />
+                <div className={prefixInputWrapClass}>
+                  <span className={prefixLabelClass}>Rs.</span>
+                  <input
+                    id="therapist-service-cost"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={cost}
+                    onChange={(e) => {
+                      setCost(digitsOnly(e.target.value, 6));
+                      setFieldErrors((prev) => ({ ...prev, cost: undefined }));
+                    }}
+                    onBlur={() => {
+                      const message = validatePriceValue(cost);
+                      setFieldErrors((prev) => ({ ...prev, cost: message ?? undefined }));
+                    }}
+                    className={prefixInputClass}
+                    placeholder="3500"
+                    aria-invalid={Boolean(fieldErrors.cost)}
+                    aria-describedby="therapist-service-cost-hint"
+                  />
+                </div>
+                <p id="therapist-service-cost-hint" className={fieldHintClass}>
+                  Rs. {PRICE_MIN.toLocaleString("en-LK")}–{PRICE_MAX.toLocaleString("en-LK")}
+                </p>
+                {fieldErrors.cost ? <p className={fieldErrorClass}>{fieldErrors.cost}</p> : null}
               </div>
 
+              {/* Description is category-level (services table) — not persisted from this modal yet.
               <div className="space-y-2 md:col-span-2">
                 <label className={labelClass} htmlFor="therapist-service-description">
                   Description
@@ -365,6 +489,7 @@ export default function EditTherapistServiceModal({
                   rows={4}
                 />
               </div>
+              */}
             </div>
           </div>
 
@@ -373,7 +498,7 @@ export default function EditTherapistServiceModal({
               {!isCreate && (
                 <button
                   type="button"
-                  onClick={() => void onDelete()}
+                  onClick={() => setDeleteConfirmOpen(true)}
                   disabled={submitting}
                   className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50 active:scale-[0.99] disabled:opacity-40"
                 >
@@ -402,6 +527,20 @@ export default function EditTherapistServiceModal({
           </footer>
         </div>
       </div>
+
+      {deleteConfirmOpen && service ? (
+        <ConfirmationModal
+          title="Delete service"
+          description={`Are you sure you want to delete "${service.title}"? This cannot be undone.`}
+          confirmLabel="Yes, delete"
+          disableDismiss={submitting}
+          onClose={() => {
+            if (submitting) return;
+            setDeleteConfirmOpen(false);
+          }}
+          onConfirm={confirmDelete}
+        />
+      ) : null}
     </div>
   );
 }

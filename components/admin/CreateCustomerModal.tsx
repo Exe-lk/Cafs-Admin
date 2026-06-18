@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import CustomerProfileFormFields from "@/components/admin/CustomerProfileFormFields";
 import type { AdminCustomerProfile } from "@/components/admin/EditCustomerModal";
-
-function cx(...classes: Array<string | false | null | undefined>) {
-  return classes.filter(Boolean).join(" ");
-}
+import {
+  type CustomerFormFieldErrors,
+  type CustomerFormFieldKey,
+  type CustomerFormFields,
+  isCustomerFormValid,
+  validateCustomerForm,
+  validateCustomerFormField,
+} from "@/lib/admin/customerFormValidation";
 
 const EMPTY_PROFILE: AdminCustomerProfile = {
   id: "",
@@ -19,6 +24,17 @@ const EMPTY_PROFILE: AdminCustomerProfile = {
   avatarUrl: null,
 };
 
+function toFormFields(draft: AdminCustomerProfile): CustomerFormFields {
+  return {
+    fullName: draft.fullName,
+    phone: draft.phone,
+    email: draft.email,
+    company: draft.company,
+    address: draft.address,
+    country: draft.country,
+  };
+}
+
 export default function CreateCustomerModal({
   onClose,
   onCreate,
@@ -27,6 +43,7 @@ export default function CreateCustomerModal({
   onCreate: (draft: Omit<AdminCustomerProfile, "id">) => void;
 }) {
   const [draft, setDraft] = useState<AdminCustomerProfile>(EMPTY_PROFILE);
+  const [fieldErrors, setFieldErrors] = useState<CustomerFormFieldErrors>({});
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -36,9 +53,51 @@ export default function CreateCustomerModal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  const canCreate = useMemo(() => {
-    return Boolean(draft.fullName.trim() && draft.phone.trim());
-  }, [draft.fullName, draft.phone]);
+  const formFields = useMemo(() => toFormFields(draft), [draft]);
+
+  const canCreate = useMemo(() => isCustomerFormValid(formFields), [formFields]);
+
+  const handleFieldBlur = useCallback(
+    (field: CustomerFormFieldKey) => {
+      const message = validateCustomerFormField(field, formFields);
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        if (message) next[field] = message;
+        else delete next[field];
+        return next;
+      });
+    },
+    [formFields],
+  );
+
+  const handleChange = useCallback((patch: Partial<CustomerFormFields>) => {
+    setDraft((prev) => ({ ...prev, ...patch }));
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(patch) as CustomerFormFieldKey[]) {
+        delete next[key];
+      }
+      return next;
+    });
+  }, []);
+
+  function submit() {
+    const errors = validateCustomerForm(formFields);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    const { id, ...rest } = draft;
+    void id;
+    onCreate({
+      ...rest,
+      fullName: rest.fullName.trim(),
+      phone: rest.phone.trim(),
+      email: rest.email.trim(),
+      company: rest.company.trim(),
+      address: rest.address.trim(),
+    });
+    onClose();
+  }
 
   return (
     <div
@@ -82,111 +141,16 @@ export default function CreateCustomerModal({
             className="space-y-8"
             onSubmit={(e) => {
               e.preventDefault();
-              if (!canCreate) return;
-              // Drop `id` (assigned by parent on create).
-              const { id, ...rest } = draft;
-              void id;
-              onCreate(rest);
-              onClose();
+              submit();
             }}
           >
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className="ml-1 block text-[0.75rem] font-semibold uppercase tracking-wider text-mgmt-on-surface-variant">
-                  Full name
-                </label>
-                <input
-                  className="w-full rounded-xl border-none bg-mgmt-surface-container-low px-4 py-3 text-sm text-mgmt-on-surface transition-all placeholder:text-mgmt-on-surface-variant focus:bg-mgmt-surface-container-lowest focus:ring-1 focus:ring-mgmt-primary focus:outline-none"
-                  type="text"
-                  value={draft.fullName}
-                  onChange={(e) => setDraft((p) => ({ ...p, fullName: e.target.value }))}
-                  autoFocus
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="ml-1 block text-[0.75rem] font-semibold uppercase tracking-wider text-mgmt-on-surface-variant">
-                  Primary phone
-                </label>
-                <input
-                  className="w-full rounded-xl border-none bg-mgmt-surface-container-low px-4 py-3 text-sm text-mgmt-on-surface transition-all placeholder:text-mgmt-on-surface-variant focus:bg-mgmt-surface-container-lowest focus:ring-1 focus:ring-mgmt-primary focus:outline-none"
-                  type="tel"
-                  value={draft.phone}
-                  onChange={(e) => setDraft((p) => ({ ...p, phone: e.target.value }))}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className="ml-1 block text-[0.75rem] font-semibold uppercase tracking-wider text-mgmt-on-surface-variant">
-                  Primary email
-                </label>
-                <input
-                  className="w-full rounded-xl border-none bg-mgmt-surface-container-low px-4 py-3 text-sm text-mgmt-on-surface transition-all placeholder:text-mgmt-on-surface-variant focus:bg-mgmt-surface-container-lowest focus:ring-1 focus:ring-mgmt-primary focus:outline-none"
-                  placeholder="e.g. name@company.com"
-                  type="email"
-                  value={draft.email}
-                  onChange={(e) => setDraft((p) => ({ ...p, email: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="ml-1 block text-[0.75rem] font-semibold uppercase tracking-wider text-mgmt-on-surface-variant">
-                  Company
-                </label>
-                <input
-                  className="w-full rounded-xl border-none bg-mgmt-surface-container-low px-4 py-3 text-sm text-mgmt-on-surface transition-all placeholder:text-mgmt-on-surface-variant focus:bg-mgmt-surface-container-lowest focus:ring-1 focus:ring-mgmt-primary focus:outline-none"
-                  placeholder="Enter company name"
-                  type="text"
-                  value={draft.company}
-                  onChange={(e) => setDraft((p) => ({ ...p, company: e.target.value }))}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="ml-1 block text-[0.75rem] font-semibold uppercase tracking-wider text-mgmt-on-surface-variant">
-                Address
-              </label>
-              <textarea
-                className="w-full resize-none rounded-xl border-none bg-mgmt-surface-container-low px-4 py-3 text-sm text-mgmt-on-surface transition-all placeholder:text-mgmt-on-surface-variant focus:bg-mgmt-surface-container-lowest focus:ring-1 focus:ring-mgmt-primary focus:outline-none"
-                placeholder="Street address, apartment, suite, etc."
-                rows={2}
-                value={draft.address}
-                onChange={(e) => setDraft((p) => ({ ...p, address: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="ml-1 block text-[0.75rem] font-semibold uppercase tracking-wider text-mgmt-on-surface-variant">
-                Country
-              </label>
-              <div className="relative">
-                <select
-                  className={cx(
-                    "w-full appearance-none rounded-xl border-none bg-mgmt-surface-container-low px-4 py-3 text-sm text-mgmt-on-surface transition-all focus:bg-mgmt-surface-container-lowest focus:ring-1 focus:ring-mgmt-primary focus:outline-none",
-                  )}
-                  value={draft.country}
-                  onChange={(e) => setDraft((p) => ({ ...p, country: e.target.value }))}
-                >
-                  {[
-                    "Sri Lanka",
-                    "United States",
-                    "United Kingdom",
-                    "Australia",
-                    "India",
-                    "Singapore",
-                  ].map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-                <MaterialSymbol
-                  name="expand_more"
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-mgmt-on-surface-variant"
-                />
-              </div>
-            </div>
+            <CustomerProfileFormFields
+              draft={formFields}
+              fieldErrors={fieldErrors}
+              onChange={handleChange}
+              onBlur={handleFieldBlur}
+              autoFocus
+            />
           </form>
         </div>
 
@@ -202,13 +166,7 @@ export default function CreateCustomerModal({
             type="button"
             className="rounded-xl bg-gradient-to-br from-mgmt-primary to-mgmt-primary-dim px-8 py-3 text-sm font-bold text-mgmt-on-primary shadow-lg transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
             disabled={!canCreate}
-            onClick={() => {
-              if (!canCreate) return;
-              const { id, ...rest } = draft;
-              void id;
-              onCreate(rest);
-              onClose();
-            }}
+            onClick={submit}
           >
             Create
           </button>
@@ -217,4 +175,3 @@ export default function CreateCustomerModal({
     </div>
   );
 }
-

@@ -10,6 +10,9 @@ const SELECT_COLUMNS =
 const SELECT_WITH_SERVICE =
   `${SELECT_COLUMNS}, service:services!therapist_services_service_id_fkey(service_id,name,description)`;
 
+const DUPLICATE_THERAPIST_SERVICE_MESSAGE =
+  "This therapist already offers this service category.";
+
 function resolveServiceCategoryId(searchParams: URLSearchParams): string | null {
   const serviceId = searchParams.get("serviceId")?.trim() || null;
   const categoryId =
@@ -27,6 +30,57 @@ type CreateBody = {
   durationMinutes?: number | null;
   isActive?: boolean;
 };
+
+function buildTherapistServiceValues(body: CreateBody) {
+  return {
+    price_lkr: typeof body.priceLkr === "number" ? body.priceLkr : null,
+    duration_minutes:
+      typeof body.durationMinutes === "number"
+        ? Math.max(5, Math.floor(body.durationMinutes))
+        : null,
+    is_active: typeof body.isActive === "boolean" ? body.isActive : true,
+  };
+}
+
+function isTherapistServiceUniqueViolation(message: string): boolean {
+  return message.includes("therapist_services_therapist_id_service_id_key");
+}
+
+async function reactivateInactiveTherapistService(
+  adminSupabase: ReturnType<typeof createSupabaseServiceRoleClient>,
+  therapistId: string,
+  serviceId: string,
+  body: CreateBody,
+) {
+  const { data: existing, error: existingErr } = await adminSupabase
+    .from("therapist_services")
+    .select("therapist_service_id,is_active")
+    .eq("therapist_id", therapistId)
+    .eq("service_id", serviceId)
+    .maybeSingle();
+  if (existingErr) return { error: existingErr.message as string };
+  if (!existing) return { notFound: true as const };
+  if (existing.is_active) {
+    return {
+      conflict: true as const,
+      message: DUPLICATE_THERAPIST_SERVICE_MESSAGE,
+    };
+  }
+
+  const { data: updated, error: updateErr } = await adminSupabase
+    .from("therapist_services")
+    .update(buildTherapistServiceValues(body))
+    .eq("therapist_service_id", existing.therapist_service_id)
+    .select(SELECT_COLUMNS)
+    .maybeSingle();
+  if (updateErr) return { error: updateErr.message as string };
+  if (!updated) return { error: "Therapist service not found" as const };
+
+  return {
+    therapistServiceId: String(existing.therapist_service_id),
+    reactivated: true as const,
+  };
+}
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthContext(request);
@@ -90,6 +144,29 @@ export async function POST(request: NextRequest) {
     return err("Validation error", 400, [{ field: "serviceId", message: "Required" }]);
   }
 
+  const reactivateResult = await reactivateInactiveTherapistService(
+    adminSupabase,
+    therapistId,
+    serviceId,
+    body,
+  );
+  if ("error" in reactivateResult && reactivateResult.error) {
+    return err(reactivateResult.error, 400);
+  }
+  if ("conflict" in reactivateResult && reactivateResult.conflict) {
+    return err(DUPLICATE_THERAPIST_SERVICE_MESSAGE, 409, [
+      { field: "serviceId", message: DUPLICATE_THERAPIST_SERVICE_MESSAGE },
+    ]);
+  }
+  if ("therapistServiceId" in reactivateResult && reactivateResult.reactivated) {
+    const res = created(
+      { therapistServiceId: reactivateResult.therapistServiceId, reactivated: true },
+      "Therapist service restored successfully",
+    );
+    res.headers.set("Cache-Control", "no-store");
+    return res;
+  }
+
   const therapistServiceId = newUuid();
   const now = new Date().toISOString();
 
@@ -97,15 +174,36 @@ export async function POST(request: NextRequest) {
     therapist_service_id: therapistServiceId,
     therapist_id: therapistId,
     service_id: serviceId,
-    price_lkr: typeof body.priceLkr === "number" ? body.priceLkr : null,
-    duration_minutes:
-      typeof body.durationMinutes === "number"
-        ? Math.max(5, Math.floor(body.durationMinutes))
-        : null,
-    is_active: typeof body.isActive === "boolean" ? body.isActive : true,
+    ...buildTherapistServiceValues(body),
     created_at: now,
   });
-  if (error) return err(error.message, 400);
+  if (error) {
+    if (isTherapistServiceUniqueViolation(error.message)) {
+      const retry = await reactivateInactiveTherapistService(
+        adminSupabase,
+        therapistId,
+        serviceId,
+        body,
+      );
+      if ("therapistServiceId" in retry && retry.reactivated) {
+        const res = created(
+          { therapistServiceId: retry.therapistServiceId, reactivated: true },
+          "Therapist service restored successfully",
+        );
+        res.headers.set("Cache-Control", "no-store");
+        return res;
+      }
+      if ("conflict" in retry && retry.conflict) {
+        return err(DUPLICATE_THERAPIST_SERVICE_MESSAGE, 409, [
+          { field: "serviceId", message: DUPLICATE_THERAPIST_SERVICE_MESSAGE },
+        ]);
+      }
+      if ("error" in retry && retry.error) {
+        return err(retry.error, 400);
+      }
+    }
+    return err(error.message, 400);
+  }
 
   const res = created({ therapistServiceId }, "Therapist service created successfully");
   res.headers.set("Cache-Control", "no-store");

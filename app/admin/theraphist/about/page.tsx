@@ -51,6 +51,9 @@ export default function TheraphistSettingsAboutPage() {
     return `https://cafsdev.exe.lk/services?${therapistBookingSlug(profile.fullName)}`;
   }, [profile.fullName]);
 
+  const statusLabel = profile.hidden ? "Inactive" : "Active";
+  const statusIcon = profile.hidden ? "visibility_off" : "check_circle";
+
   const [profileLinkCopied, setProfileLinkCopied] = useState(false);
 
   const copyProfileLink = useCallback(async () => {
@@ -64,7 +67,7 @@ export default function TheraphistSettingsAboutPage() {
   }, [profileLink]);
 
   return (
-    <div className="px-4 py-6 sm:px-6 sm:py-8 lg:px-12 lg:py-10">
+    <div className="px-4 py-3 sm:px-6 sm:py-4 lg:px-12 lg:py-5">
       <div className="max-w-2xl">
         <TherapistDetailRow icon="call">
           {phone ? (
@@ -151,13 +154,14 @@ export default function TheraphistSettingsAboutPage() {
           </div>
         </TherapistDetailRow>
 
-        <TherapistDetailRow
-          icon="lock"
-          trailing={
-            <MaterialSymbol name="expand_more" className="text-[20px] text-mgmt-on-surface-variant" />
-          }
-        >
-          {profile.hidden ? "Hidden profile" : "Therapist"}
+        <TherapistDetailRow icon={statusIcon}>
+          <span
+            className={
+              profile.hidden ? "text-mgmt-on-surface-variant" : "font-medium text-mgmt-on-surface"
+            }
+          >
+            {statusLabel}
+          </span>
         </TherapistDetailRow>
       </div>
     </div>

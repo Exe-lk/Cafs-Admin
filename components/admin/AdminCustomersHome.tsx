@@ -12,6 +12,7 @@ import {
   lastActivityFromAppointments,
   type ClientAppointmentListItem,
 } from "@/lib/admin/clientAppointments";
+import { formatApiErrorMessage } from "@/lib/api/formatApiError";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -100,8 +101,8 @@ export default function AdminCustomersHome() {
   }, [customers, query]);
 
   const selected = useMemo(() => {
-    const match = filtered.find((c) => c.id === selectedId);
-    return match ?? filtered[0] ?? null;
+    if (!selectedId) return null;
+    return filtered.find((c) => c.id === selectedId) ?? null;
   }, [filtered, selectedId]);
 
   useEffect(() => {
@@ -169,19 +170,21 @@ export default function AdminCustomersHome() {
         data-purpose="customers-list-fixed"
       >
       <section className="flex min-h-0 flex-1 flex-col bg-mgmt-surface-container-lowest">
-        <header className="shrink-0 px-6 pb-4 pt-6">
-          <div className="mb-4 flex items-center justify-between gap-3">
+        <header className="sticky top-0 z-40 shrink-0 border-b border-mgmt-outline-variant/10 bg-mgmt-surface-container-lowest px-5 py-4">
+          <div className="flex items-center justify-between gap-3">
             <h2 className={SECONDARY_NAV_HEADING_CLASS}>Customers</h2>
-            <button
-              type="button"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-mgmt-on-surface text-mgmt-surface-container-lowest shadow-md transition-transform hover:bg-mgmt-on-background active:scale-95"
-              onClick={() => setCreateOpen(true)}
-              aria-label="Add customer"
-            >
-              <MaterialSymbol name="add" className="text-[22px]" />
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-mgmt-on-surface text-mgmt-surface-container-lowest shadow-md transition-transform hover:bg-mgmt-on-background active:scale-95"
+                onClick={() => setCreateOpen(true)}
+                aria-label="Add customer"
+              >
+                <MaterialSymbol name="add" className="text-[22px]" />
+              </button>
+            </div>
           </div>
-          <div className="relative">
+          <div className="relative mt-3">
             <MaterialSymbol
               name="search"
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-lg text-mgmt-on-surface-variant"
@@ -368,9 +371,27 @@ export default function AdminCustomersHome() {
             onUpdateCustomer={(next) => {
               setCustomers((prev) => prev.map((c) => (c.id === next.id ? next : c)));
             }}
-            onDeleteCustomer={(customerId) => {
-              setCustomers((prev) => prev.filter((c) => c.id !== customerId));
-              setSelectedId((prevSelected) => (prevSelected === customerId ? "" : prevSelected));
+            onDeleteCustomer={async (customerId) => {
+              setErrorMsg(null);
+              const res = await fetch(
+                `/api/v1/admin/clients/${encodeURIComponent(customerId)}`,
+                { method: "DELETE", cache: "no-store" },
+              );
+              const json = (await res.json()) as {
+                status?: string;
+                message?: string;
+                errors?: Array<{ field?: string; message?: string }>;
+              };
+              if (!res.ok || json?.status !== "success") {
+                throw new Error(
+                  formatApiErrorMessage(json, `Delete failed (HTTP ${res.status})`),
+                );
+              }
+              setCustomers((prev) => {
+                const next = prev.filter((c) => c.id !== customerId);
+                setSelectedId((sid) => (sid === customerId ? (next[0]?.id ?? "") : sid));
+                return next;
+              });
             }}
           />
         ) : (

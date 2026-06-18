@@ -256,18 +256,7 @@ export default function TherapistsDirectoryColumn({
                     {initials(t.name)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="truncate text-sm font-semibold text-mgmt-on-surface">{t.name}</p>
-                      <span
-                        className={
-                          t.status === "Inactive"
-                            ? "shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[0.65rem] font-bold text-slate-600"
-                            : "shrink-0 rounded-full bg-[#F1F1F1] px-2 py-0.5 text-[0.65rem] font-bold text-slate-700"
-                        }
-                      >
-                        {t.status ?? "Active"}
-                      </span>
-                    </div>
+                    <p className="truncate text-sm font-semibold text-mgmt-on-surface">{t.name}</p>
                     <p className="truncate text-[0.75rem] text-mgmt-on-surface-variant">
                       {t.specialty ?? "Therapist"}
                     </p>
