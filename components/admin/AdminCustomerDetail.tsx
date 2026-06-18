@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import ConfirmationModal from "@/components/admin/ConfirmationModal";
 import AdminCustomerFormDetailsTab from "@/components/admin/AdminCustomerFormDetailsTab";
 import CreateAppointmentModal from "@/components/admin/CreateAppointmentModal";
 import CustomerAppointmentUpdatesPanel from "@/components/admin/CustomerAppointmentUpdatesPanel";
 import EditCustomerModal, { type AdminCustomerProfile } from "@/components/admin/EditCustomerModal";
+import ProfileAvatarUpload from "@/components/admin/ProfileAvatarUpload";
 import EditAppointmentModal, {
   type AdminEditableAppointment,
 } from "@/components/admin/EditAppointmentModal";
@@ -75,11 +77,6 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function avatarInitial(name: string) {
-  const t = name.trim();
-  return t ? t[0]!.toUpperCase() : "?";
-}
-
 function firstName(name: string) {
   const t = name.trim();
   if (!t) return "this client";
@@ -95,6 +92,29 @@ function providerInitial(name: string) {
   return t ? t[0]!.toUpperCase() : "?";
 }
 
+function CustomerDetailRow({
+  icon,
+  children,
+  trailing,
+}: {
+  icon: string;
+  children: ReactNode;
+  trailing?: ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-4 border-b border-mgmt-outline-variant/10 py-3 last:border-b-0">
+      <MaterialSymbol
+        name={icon}
+        className="mt-0.5 shrink-0 text-[20px] text-mgmt-on-surface-variant"
+      />
+      <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 text-sm text-mgmt-on-surface">{children}</div>
+        {trailing ? <div className="flex shrink-0 items-center gap-1">{trailing}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminCustomerDetail({
   customer,
   onUpdateCustomer,
@@ -103,10 +123,11 @@ export default function AdminCustomerDetail({
 }: {
   customer: AdminCustomerModel;
   onUpdateCustomer: (next: AdminCustomerModel) => void;
-  onDeleteCustomer?: (customerId: string) => void;
+  onDeleteCustomer?: (customerId: string) => void | Promise<void>;
   onPersistProfile?: (args: { clientId: string; fullName: string; phone: string }) => Promise<void>;
 }) {
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [bookAppointmentOpen, setBookAppointmentOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -116,6 +137,7 @@ export default function AdminCustomerDetail({
   const [sessionNoteHistory, setSessionNoteHistory] = useState<AdminCustomerNoteHistoryItem[]>(
     [],
   );
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [editingAppt, setEditingAppt] = useState<AdminEditableAppointment | null>(null);
   const [formSheet, setFormSheet] = useState<unknown>(null);
   const [formSheetLoading, setFormSheetLoading] = useState(false);
@@ -215,23 +237,20 @@ export default function AdminCustomerDetail({
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-mgmt-surface-container-lowest">
       <div className="shrink-0 px-6 pt-6 sm:px-8 sm:pt-8">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="flex min-w-0 flex-1 items-start gap-4 sm:gap-6">
-            {customer.avatarUrl ? (
-              <div className="h-24 w-24 shrink-0 overflow-hidden rounded-full bg-[#E7E7E7]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={customer.avatarUrl} alt="" className="h-full w-full object-cover" />
-              </div>
-            ) : (
-              <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-[#E7E7E7] text-4xl font-bold text-[#5F5F5F]">
-                {avatarInitial(customer.fullName)}
-              </div>
-            )}
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 flex-1 items-center gap-4 sm:gap-6">
+            <ProfileAvatarUpload
+              imageUrl={customer.avatarUrl}
+              alt={customer.fullName}
+              onImageChange={(avatarUrl) => {
+                onUpdateCustomer({ ...customer, avatarUrl });
+              }}
+            />
             <div className="min-w-0">
               <h3 className="truncate text-[1.6rem] font-bold tracking-tight text-mgmt-on-background sm:text-[2rem]">
                 {customer.fullName}
               </h3>
-              <div className="mt-1 flex flex-col gap-1 text-mgmt-on-surface-variant sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+              {/* <div className="mt-1 flex flex-col gap-1 text-mgmt-on-surface-variant sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
                 <div className="flex items-center gap-2">
                   <MaterialSymbol name="location_on" className="text-[18px]" />
                   <span className="text-sm">{locationLine}</span>
@@ -241,11 +260,11 @@ export default function AdminCustomerDetail({
                   <MaterialSymbol name="schedule" className="text-[18px]" />
                   <span className="text-sm font-medium">{customer.localTimeDisplay ?? "—"}</span>
                 </div>
-              </div>
+              </div> */}
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2 md:self-start">
+          <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container-low"
@@ -289,10 +308,8 @@ export default function AdminCustomerDetail({
                     role="menuitem"
                     onClick={() => {
                       setMoreMenuOpen(false);
-                      const ok = window.confirm(
-                        `Delete customer "${customer.fullName}"? This cannot be undone.`,
-                      );
-                      if (ok) onDeleteCustomer?.(customer.id);
+                      setDeleteError(null);
+                      setDeleteConfirmOpen(true);
                     }}
                     className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 hover:bg-mgmt-surface-container-low"
                   >
@@ -388,109 +405,85 @@ export default function AdminCustomerDetail({
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 sm:px-8 sm:pb-8">
         {tab === "about" && (
           <div className="py-10">
-            <section>
-              <h4 className="mb-8 text-sm font-semibold text-mgmt-on-surface">User Details</h4>
-              <div className="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-3">
-                <div className="space-y-6">
-                  <div>
-                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                      Phone
-                    </label>
-                    <div className="flex items-center gap-3 text-mgmt-on-surface">
-                      <MaterialSymbol name="call" className="text-mgmt-primary" />
-                      <span className="text-sm font-medium">{customer.phone}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                      Email
-                    </label>
-                    <div className="flex items-center gap-3 text-mgmt-on-surface">
-                      <MaterialSymbol name="mail" className="text-mgmt-primary" />
-                      <span className="text-sm font-medium">{customer.email}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                      Company
-                    </label>
-                    <div className="flex items-center gap-3 text-mgmt-on-surface">
-                      <MaterialSymbol name="business" className="text-mgmt-primary" />
-                      <span className="text-sm font-medium">{customer.company}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-6 border-mgmt-surface-container pl-0 md:border-l lg:pl-12">
-                  <div>
-                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                      Status
-                    </label>
-                    <span className="inline-flex items-center rounded-full bg-mgmt-primary-container px-4 py-1.5 text-[0.7rem] font-bold text-mgmt-on-primary-container">
-                      {customer.statusLabel}
+            <section className="mb-0">
+              <h4 className="mb-3 text-sm font-semibold text-mgmt-on-surface">User Details</h4>
+              <div className="max-w-2xl">
+                <CustomerDetailRow icon="call">
+                  {customer.phone.trim() ? (
+                    <a
+                      href={`tel:${customer.phone.replace(/\s/g, "")}`}
+                      className="hover:underline"
+                    >
+                      {customer.phone}
+                    </a>
+                  ) : (
+                    <span className="text-mgmt-on-surface-variant underline decoration-mgmt-outline-variant/60 underline-offset-2">
+                      Add phone
                     </span>
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                      Last Activity
-                    </label>
-                    <p className="text-sm font-medium text-mgmt-on-surface">
-                      {customer.lastActivity ?? customer.memberSinceLine}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                      Tier
-                    </label>
-                    <p className="text-sm font-medium text-mgmt-on-surface">{customer.tierLabel}</p>
-                  </div>
-                </div>
+                  )}
+                </CustomerDetailRow>
 
-                <div className="space-y-6 border-mgmt-surface-container pl-0 lg:border-l lg:pl-12">
-                  <div>
-                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                      Quick stats
-                    </label>
-                    <div className="space-y-3 rounded-xl bg-mgmt-surface-container-low p-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-mgmt-on-surface-variant">Total bookings</span>
-                        <span className="text-sm font-semibold text-mgmt-on-surface">
-                          {customer.stats.totalBookings}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-mgmt-on-surface-variant">Cancellations</span>
-                        <span className="text-sm font-semibold text-mgmt-on-surface">
-                          {customer.stats.cancellations}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-mgmt-on-surface-variant">LTV</span>
-                        <span className="text-sm font-semibold text-mgmt-primary">
-                          {moneyUsd(customer.stats.ltvUsd)}
-                        </span>
-                      </div>
+                <CustomerDetailRow icon="mail">
+                  {customer.email.trim() ? (
+                    <a href={`mailto:${customer.email}`} className="break-all hover:underline">
+                      {customer.email}
+                    </a>
+                  ) : (
+                    <span className="text-mgmt-on-surface-variant">—</span>
+                  )}
+                </CustomerDetailRow>
+
+                {/* <CustomerDetailRow icon="business">
+                  {customer.company.trim() ? customer.company : "—"}
+                </CustomerDetailRow>
+
+                <CustomerDetailRow icon="verified">
+                  {customer.statusLabel}
+                </CustomerDetailRow>
+
+                <CustomerDetailRow icon="schedule">
+                  {customer.lastActivity ?? customer.memberSinceLine}
+                </CustomerDetailRow>
+
+                <CustomerDetailRow icon="workspace_premium">
+                  {customer.tierLabel}
+                </CustomerDetailRow>
+
+                <CustomerDetailRow icon="insights">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-mgmt-on-surface-variant">Total bookings</span>
+                      <span className="font-semibold">{customer.stats.totalBookings}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-mgmt-on-surface-variant">Cancellations</span>
+                      <span className="font-semibold">{customer.stats.cancellations}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-mgmt-on-surface-variant">LTV</span>
+                      <span className="font-semibold text-mgmt-primary">
+                        {moneyUsd(customer.stats.ltvUsd)}
+                      </span>
                     </div>
                   </div>
+                </CustomerDetailRow>
 
-                  <div>
-                    <label className="mb-2 block text-[0.7rem] font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                      Address
-                    </label>
-                    <p className="text-sm font-medium text-mgmt-on-surface">{customer.address}</p>
-                  </div>
-                </div>
+                <CustomerDetailRow icon="location_on">
+                  {customer.address.trim() ? customer.address : "—"}
+                </CustomerDetailRow> */}
               </div>
             </section>
 
-            <section className="mt-14 border-t border-mgmt-surface-container pt-14">
-              <h4 className="mb-8 text-sm font-semibold text-mgmt-on-surface">Form Details</h4>
-              <AdminCustomerFormDetailsTab
-                sheet={formSheet}
-                loading={formSheetLoading}
-                error={formSheetError}
-                embedded
-              />
+            <section className="mt-6 border-t border-mgmt-surface-container pt-8">
+              <h4 className="mb-3 text-sm font-semibold text-mgmt-on-surface">Form Details</h4>
+              <div className="max-w-2xl">
+                <AdminCustomerFormDetailsTab
+                  sheet={formSheet}
+                  loading={formSheetLoading}
+                  error={formSheetError}
+                  embedded
+                />
+              </div>
             </section>
           </div>
         )}
@@ -724,8 +717,8 @@ export default function AdminCustomerDetail({
           }}
           onDelete={
             onDeleteCustomer
-              ? (customerId) => {
-                  onDeleteCustomer(customerId);
+              ? async (customerId) => {
+                  await onDeleteCustomer(customerId);
                 }
               : undefined
           }
@@ -789,6 +782,33 @@ export default function AdminCustomerDetail({
             onUpdateCustomer({ ...customer, appointmentDays: updatedDays });
             setUpdatesReloadKey((k) => k + 1);
             setEditingAppt(null);
+          }}
+        />
+      ) : null}
+
+      {deleteConfirmOpen && onDeleteCustomer ? (
+        <ConfirmationModal
+          title="Delete customer"
+          description={
+            deleteError ??
+            `Are you sure you want to delete "${customer.fullName}"? This cannot be undone.`
+          }
+          confirmLabel="Yes, delete"
+          disableDismiss={Boolean(deleteError)}
+          onClose={() => {
+            setDeleteConfirmOpen(false);
+            setDeleteError(null);
+          }}
+          onConfirm={async () => {
+            try {
+              setDeleteError(null);
+              await onDeleteCustomer(customer.id);
+              setDeleteConfirmOpen(false);
+            } catch (e) {
+              setDeleteError(
+                e instanceof Error ? e.message : "Failed to delete customer",
+              );
+            }
           }}
         />
       ) : null}

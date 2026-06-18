@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import ServicesSubNav from "@/components/admin/ServicesSubNav";
 import { adminSidebarInsetLeft } from "@/components/admin/adminSidebarLayout";
@@ -36,7 +36,9 @@ export default function AdminServicesShell({ children }: { children: ReactNode }
         )}
         data-purpose="services-subnav-fixed"
       >
-        <ServicesSubNav />
+        <Suspense fallback={null}>
+          <ServicesSubNav />
+        </Suspense>
       </div>
       <div className="hidden w-72 shrink-0 md:block" aria-hidden />
 

@@ -3,8 +3,10 @@
 import { useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import {
+  BANK_REFERENCE_MAX_LEN,
   BANK_SLIP_ACCEPT,
   BANK_SLIP_MAX_BYTES,
+  BANK_SLIP_URL_MAX_LEN,
   validateBankSlipFile,
   type BankSlipFieldValues,
 } from "@/lib/payments/bankSlipUpload";
@@ -61,17 +63,14 @@ export default function BankSlipUploadFields({
   if (readOnly) {
     if (!existingProofUrl) return null;
     return (
-      <div className="space-y-2">
-        <p className="text-[11px] font-semibold text-mgmt-on-surface-variant">Bank slip</p>
-        <a
-          href={existingProofUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-2 rounded-lg bg-mgmt-primary px-4 py-2 text-xs font-bold uppercase tracking-wider text-mgmt-on-primary transition-opacity hover:opacity-90"
-        >
-          View current proof
-        </a>
-      </div>
+      <a
+        href={existingProofUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-2 rounded-lg bg-mgmt-primary px-4 py-2 text-xs font-bold uppercase tracking-wider text-mgmt-on-primary transition-opacity hover:opacity-90"
+      >
+        View current proof
+      </a>
     );
   }
 
@@ -100,6 +99,7 @@ export default function BankSlipUploadFields({
           value={bankReference}
           onChange={(e) => onBankReferenceChange(e.target.value)}
           disabled={inputDisabled}
+          maxLength={BANK_REFERENCE_MAX_LEN}
           placeholder="Transaction / reference number"
           className={cx("mt-1", fieldClass)}
         />
@@ -165,6 +165,7 @@ export default function BankSlipUploadFields({
           value={bankSlipUrl}
           onChange={(e) => onBankSlipUrlChange(e.target.value)}
           disabled={inputDisabled}
+          maxLength={BANK_SLIP_URL_MAX_LEN}
           placeholder="https://…"
           className={cx("mt-1", fieldClass)}
         />

@@ -114,7 +114,7 @@ export default function ServiceTypesSubNav() {
           )}
         </div>
 
-        <div>
+        {/* <div>
           <Link
             href="/admin/service-types/classes"
             className={cx(
@@ -142,7 +142,7 @@ export default function ServiceTypesSubNav() {
               </p>
             </div>
           )}
-        </div>
+        </div> */}
       </div>
     </aside>
   );

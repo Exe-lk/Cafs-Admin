@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import TherapistsDirectoryColumn from "@/components/admin/TherapistsDirectoryColumn";
 import SettingsHeader from "@/components/admin/settings/SettingsHeader";
 import EditTherapistProfileModal, {
   type AdminTherapistProfile,
 } from "@/components/admin/EditTherapistProfileModal";
+import ConfirmationModal from "@/components/admin/ConfirmationModal";
 import { AdminTherapistProvider } from "@/components/admin/AdminTherapistContext";
 import { adminSidebarInsetLeft } from "@/components/admin/adminSidebarLayout";
 import TeamPanelOpenButton from "@/components/admin/TeamPanelOpenButton";
@@ -27,6 +28,9 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [teamPanelOpen, setTeamPanelOpen] = useTeamPanelOpen(true);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
 
   const [profilesById, setProfilesById] = useState<Record<string, AdminTherapistProfile>>({});
 
@@ -74,6 +78,7 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
             aboutYou: String(t.bio ?? ""),
             hidden: t.visibility === "private",
             timezone: String(t.timezone ?? "").trim() || "Asia/Colombo",
+            avatarUrl: null,
           };
         }
 
@@ -93,6 +98,17 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
 
     return () => ac.abort();
   }, []);
+
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [moreMenuOpen]);
 
   const selected = therapists.find((t) => t.id === selectedId) ?? therapists[0];
   const selectedProfile =
@@ -125,6 +141,42 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
     );
   }
 
+  function setTherapistHidden(therapistId: string, hidden: boolean) {
+    setTherapists((prev) =>
+      prev.map((x) =>
+        x.id !== therapistId ? x : { ...x, status: hidden ? "Inactive" : "Active" },
+      ),
+    );
+    setProfilesById((prev) => ({
+      ...prev,
+      [therapistId]: { ...(prev[therapistId] ?? selectedProfile), hidden },
+    }));
+    void fetch(`/api/v1/admin/therapists/${therapistId}`, {
+      method: "PUT",
+      cache: "no-store",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ visibility: hidden ? "private" : "public" }),
+    });
+  }
+
+  function deleteTherapist(therapistId: string) {
+    setTherapists((prev) => {
+      const next = prev.filter((x) => x.id !== therapistId);
+      setSelectedId((prevSelectedId) => {
+        if (prevSelectedId !== therapistId) return prevSelectedId;
+        return next[0]?.id ?? "";
+      });
+      return next;
+    });
+    setProfilesById((prev) => {
+      const { [therapistId]: removed, ...rest } = prev;
+      void removed;
+      return rest;
+    });
+  }
+
+  const isSelectedHidden = selected?.status === "Inactive";
+
   return (
     <div className="flex h-full min-h-0 flex-1 bg-mgmt-surface-container-lowest">
       {/* Desktop: fixed full-viewport team column (hidden entirely when collapsed) */}
@@ -144,7 +196,6 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
                 setSelectedId(t.id);
               }}
               onAdd={() => setCreateOpen(true)}
-              onCollapse={() => setTeamPanelOpen(false)}
             />
           </div>
           <div className="hidden w-72 shrink-0 lg:block" aria-hidden />
@@ -180,6 +231,11 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
 
         <SettingsHeader
           displayName={selected?.name ?? "Therapist"}
+          avatarUrl={selectedProfile.avatarUrl}
+          onAvatarChange={(avatarUrl) => {
+            if (!selected) return;
+            updateProfile({ ...selectedProfile, avatarUrl });
+          }}
           prefix={
             !teamPanelOpen ? <TeamPanelOpenButton onClick={() => setTeamPanelOpen(true)} /> : null
           }
@@ -194,66 +250,54 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
                 <MaterialSymbol name="edit" className="text-[22px]" />
               </button>
 
-              <button
-                type="button"
-                className="flex h-10 w-10 items-center justify-center rounded-xl bg-mgmt-surface-container-low text-mgmt-on-surface-variant transition-colors hover:bg-mgmt-surface-container"
-                onClick={() => {
-                  if (!selected) return;
-                  const nextHidden = selected.status !== "Inactive";
-                  setTherapists((prev) =>
-                    prev.map((x) =>
-                      x.id !== selected.id
-                        ? x
-                        : { ...x, status: nextHidden ? "Inactive" : "Active" },
-                    ),
-                  );
-                  setProfilesById((prev) => ({
-                    ...prev,
-                    [selected.id]: { ...(prev[selected.id] ?? selectedProfile), hidden: nextHidden },
-                  }));
-                  // Persist visibility as a best-effort (API supports this).
-                  void fetch(`/api/v1/admin/therapists/${selected.id}`, {
-                    method: "PUT",
-                    cache: "no-store",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ visibility: nextHidden ? "private" : "public" }),
-                  });
-                }}
-                aria-label={selected?.status === "Inactive" ? "Unhide account" : "Hide account"}
-                title={selected?.status === "Inactive" ? "Unhide account" : "Hide account"}
-              >
-                <MaterialSymbol
-                  name={selected?.status === "Inactive" ? "visibility" : "visibility_off"}
-                  className="text-[20px]"
-                />
-              </button>
+              <div className="relative" ref={moreMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setMoreMenuOpen((open) => !open)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container-low"
+                  aria-label="More options"
+                  aria-haspopup="menu"
+                  aria-expanded={moreMenuOpen}
+                >
+                  <MaterialSymbol name="more_vert" className="text-[22px]" />
+                </button>
 
-              <button
-                type="button"
-                className="flex h-10 w-10 items-center justify-center rounded-xl bg-mgmt-surface-container-low text-mgmt-on-surface-variant transition-colors hover:bg-mgmt-surface-container hover:text-red-600"
-                onClick={() => {
-                  if (!selected) return;
-                  const ok = window.confirm(
-                    `Delete therapist "${selected.name}"? This cannot be undone.`,
-                  );
-                  if (!ok) return;
-                  setTherapists((prev) => prev.filter((x) => x.id !== selected.id));
-                  setProfilesById((prev) => {
-                    const { [selected.id]: removed, ...rest } = prev;
-                    void removed;
-                    return rest;
-                  });
-                  setSelectedId((prevSelectedId) => {
-                    if (prevSelectedId !== selected.id) return prevSelectedId;
-                    const remaining = therapists.filter((x) => x.id !== selected.id);
-                    return remaining[0]?.id ?? "";
-                  });
-                }}
-                aria-label="Delete account"
-                title="Delete account"
-              >
-                <MaterialSymbol name="delete" className="text-[20px]" />
-              </button>
+                {moreMenuOpen ? (
+                  <div
+                    className="absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-xl border border-mgmt-outline-variant/20 bg-white py-1 shadow-lg"
+                    role="menu"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        if (!selected) return;
+                        setMoreMenuOpen(false);
+                        setTherapistHidden(selected.id, !isSelectedHidden);
+                      }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container-low"
+                    >
+                      <MaterialSymbol
+                        name={isSelectedHidden ? "visibility" : "visibility_off"}
+                        className="text-[20px] text-mgmt-on-surface-variant"
+                      />
+                      {isSelectedHidden ? "Set to visible" : "Set to hidden"}
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreMenuOpen(false);
+                        setDeleteConfirmOpen(true);
+                      }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 transition-colors hover:bg-mgmt-surface-container-low"
+                    >
+                      <MaterialSymbol name="delete" className="text-[20px]" />
+                      Delete
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           }
         />
@@ -280,28 +324,27 @@ export default function AdminTheraphistShell({ children }: { children: React.Rea
         </div>
       </section>
 
+      {selected && deleteConfirmOpen ? (
+        <ConfirmationModal
+          title="Delete therapist"
+          description={`Are you sure you want to delete "${selected.name}"? This cannot be undone.`}
+          confirmLabel="Yes, delete"
+          onClose={() => setDeleteConfirmOpen(false)}
+          onConfirm={() => {
+            deleteTherapist(selected.id);
+            setDeleteConfirmOpen(false);
+          }}
+        />
+      ) : null}
+
       {selected && editOpen ? (
         <EditTherapistProfileModal
           profile={selectedProfile}
           onClose={() => setEditOpen(false)}
           onDelete={() => {
             if (!selected) return;
-            const ok = window.confirm(
-              `Delete therapist "${selected.name}"? This cannot be undone.`,
-            );
-            if (!ok) return;
             setEditOpen(false);
-            setTherapists((prev) => prev.filter((x) => x.id !== selected.id));
-            setProfilesById((prev) => {
-              const { [selected.id]: removed, ...rest } = prev;
-              void removed;
-              return rest;
-            });
-            setSelectedId((prevSelectedId) => {
-              if (prevSelectedId !== selected.id) return prevSelectedId;
-              const remaining = therapists.filter((x) => x.id !== selected.id);
-              return remaining[0]?.id ?? "";
-            });
+            deleteTherapist(selected.id);
           }}
           onSave={(next) => {
             const phone = [next.phoneCountry.trim(), next.phoneNumber.trim()].filter(Boolean).join(" ");

@@ -3,12 +3,40 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
+  countForAppointmentStatus,
+  useAppointmentCounts,
+} from "@/components/admin/useAppointmentCounts";
+import {
   SECONDARY_NAV_HEADING_CLASS,
   SECONDARY_NAV_HEADING_WRAP_CLASS,
 } from "@/components/admin/secondaryNavLayout";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
+}
+
+function AppointmentCountBadge({
+  value,
+  loading,
+  active,
+}: {
+  value: number | null;
+  loading: boolean;
+  active: boolean;
+}) {
+  return (
+    <span
+      className={cx(
+        "min-w-6 shrink-0 rounded-full px-2 py-0.5 text-center text-xs font-bold tabular-nums",
+        active
+          ? "bg-mgmt-primary-container text-mgmt-on-primary-container"
+          : "bg-mgmt-surface-container-high text-mgmt-on-surface-variant",
+      )}
+      aria-hidden
+    >
+      {loading ? "…" : (value ?? 0)}
+    </span>
+  );
 }
 
 export const APPOINTMENT_STATUS_OPTIONS = [
@@ -34,6 +62,7 @@ export function appointmentsHref(status: AppointmentStatusNav) {
 export default function AppointmentsSubNav() {
   const searchParams = useSearchParams();
   const activeStatus = appointmentStatusFromSearchParams(searchParams.get("status"));
+  const { counts, loading } = useAppointmentCounts();
 
   return (
     <aside
@@ -58,16 +87,12 @@ export default function AppointmentsSubNav() {
                   : "text-mgmt-on-surface-variant hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface",
               )}
             >
-              <span>{item.label}</span>
-              <svg
-                className="h-4 w-4 shrink-0 opacity-60"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+              <span className="min-w-0 flex-1">{item.label}</span>
+              <AppointmentCountBadge
+                value={countForAppointmentStatus(counts, item.status)}
+                loading={loading}
+                active={isActive}
+              />
             </Link>
           );
         })}

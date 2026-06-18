@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppointmentsSubNav, {
   APPOINTMENT_STATUS_OPTIONS,
@@ -10,17 +10,33 @@ import AppointmentsSubNav, {
 } from "@/components/admin/AppointmentsSubNav";
 import { adminSidebarInsetLeft } from "@/components/admin/adminSidebarLayout";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import {
+  AppointmentCountsProvider,
+  countForAppointmentStatus,
+  useAppointmentCounts,
+} from "@/components/admin/useAppointmentCounts";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
 export default function AdminAppointmentsShell({ children }: { children: ReactNode }) {
+  return (
+    <AppointmentCountsProvider>
+      <Suspense fallback={null}>
+        <AdminAppointmentsShellInner>{children}</AdminAppointmentsShellInner>
+      </Suspense>
+    </AppointmentCountsProvider>
+  );
+}
+
+function AdminAppointmentsShellInner({ children }: { children: ReactNode }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const activeStatus = appointmentStatusFromSearchParams(searchParams.get("status"));
+  const { counts, loading: countsLoading } = useAppointmentCounts();
 
   const active = useMemo(() => {
     return (
@@ -93,7 +109,10 @@ export default function AdminAppointmentsShell({ children }: { children: ReactNo
                       )}
                       role="menuitem"
                     >
-                      <span>{opt.label}</span>
+                      <span className="min-w-0 flex-1">{opt.label}</span>
+                      <span className="ml-3 shrink-0 rounded-full bg-mgmt-surface-container-high px-2 py-0.5 text-xs font-bold tabular-nums text-mgmt-on-surface-variant">
+                        {countsLoading ? "…" : (countForAppointmentStatus(counts, opt.status) ?? 0)}
+                      </span>
                     </button>
                   );
                 })}

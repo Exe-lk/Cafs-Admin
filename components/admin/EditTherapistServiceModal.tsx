@@ -2,6 +2,9 @@
 
 import { useEffect, useId, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import ConfirmationModal from "@/components/admin/ConfirmationModal";
+import { useAdminTherapists } from "@/components/admin/useAdminTherapists";
+import { formatApiErrorMessage } from "@/lib/api/formatApiError";
 
 export type EditTherapistServiceModalItem = {
   id: string;
@@ -9,70 +12,199 @@ export type EditTherapistServiceModalItem = {
   meta: string;
   categoryId?: string;
   therapistId?: string;
+  /** Raw API values — preferred over parsing `meta` when editing. */
+  durationMinutes?: number;
+  priceLkr?: number;
   description?: string;
 };
 
-const PLACEHOLDER_CATEGORIES = [
-  { id: "cat-individual", label: "Individual therapy" },
-  { id: "cat-couples", label: "Couples counselling" },
-  { id: "cat-assessment", label: "Psychological assessment" },
-  { id: "cat-group", label: "Group session" },
-] as const;
+type ServiceOption = { id: string; label: string; description?: string };
 
-const PLACEHOLDER_THERAPISTS = [
-  { id: "th-001", label: "Dr. Anjali Perera" },
-  { id: "th-002", label: "Dr. Ruwan Silva" },
-  { id: "th-003", label: "Ms. Nethmi Fernando" },
-] as const;
+const DURATION_MIN = 10;
+const DURATION_MAX = 1000;
+const PRICE_MIN = 100;
+const PRICE_MAX = 100_000;
 
-const STRIPE_IMG =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuCqU4BgDUKDoVFjVWzcdGUmIVzSX9ylRwNT432QHZuv14b_W4a_hFfIi7s43dDkaRXR_DxXK7GM4LjWcwjjjZH-1HGHf05Iojsgqt_VBMAYlfG0EBudM9yekvZgz5XGu4fq-C6oZqEqtl_2KpKpIy3OVKYRUC1-Aik6EU5AZvYCpbGU5_jdCVHMwaX9MqoYTvKY1NX-C66-Xqx8IkLe6d6yqoPJvbKCEpVVgHdfnECA_8UOhhJJYV7UTfVGXEcrr82hCn8-WvgEI9A";
-
-const PAYPAL_IMG =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuAF4lI5L8Yy2CG4EGJbOhFPJL7FrEHkSbkMeQ4_7S-vCLXQVFQlLCzVdww3d6Kb7EU-7NWN_KRqo1zABmti-dUMFrglzFvzyzB8k5Qh-Yu1JtW4NE_HMJQQXRSV70Iu7TD29-PDc3GzwhQfHtA0Cj6NSqxOVby9NLZFTl0JryTNdwmjW9SfhvJKo0W7nktoNUAMBjpqP4jGeRnn7DMdxt-8Xo8QK_bcjDeofEkLhA27c2Qco5-mCl549R40n1_eY6X_csO232jZs44";
+function digitsOnly(value: string, maxDigits: number): string {
+  return value.replace(/\D/g, "").slice(0, maxDigits);
+}
 
 function parseMeta(meta: string): { duration: string; costLabel: string } {
   const parts = meta.split("·").map((p) => p.trim());
-  const duration = parts[0] || "60 mins";
+  const duration = parts[0] || "";
   const rest = parts[1]?.toLowerCase() || "";
-  const costLabel = rest.includes("free") ? "Rs 0" : parts[1] || "Rs 3,500";
+  const costLabel = rest.includes("free") ? "Rs 0" : parts[1] || "";
   return { duration, costLabel };
+}
+
+function parseDurationMinutes(input: string): number | null {
+  const m = input.trim().match(/(\d+)/);
+  if (!m) return null;
+  const n = Number.parseInt(m[1]!, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function parsePriceLkr(input: string): number | null {
+  const t = input.trim().toLowerCase();
+  if (!t || t.includes("free") || t === "—") return null;
+  const m = t.replace(/,/g, "").match(/(\d+)/);
+  if (!m) return null;
+  const n = Number.parseInt(m[1]!, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toWholeNumber(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.floor(n);
+}
+
+function initialDuration(service: EditTherapistServiceModalItem | null): string {
+  const fromApi = toWholeNumber(service?.durationMinutes);
+  if (fromApi != null && fromApi > 0) return String(fromApi);
+  return durationFromMeta(parseMeta(service?.meta ?? "").duration);
+}
+
+function initialCost(service: EditTherapistServiceModalItem | null): string {
+  const fromApi = toWholeNumber(service?.priceLkr);
+  if (fromApi != null && fromApi > 0) return String(fromApi);
+  const fromMeta = priceFromMeta(parseMeta(service?.meta ?? "").costLabel);
+  return fromMeta;
+}
+
+function durationFromMeta(meta: string): string {
+  const n = parseDurationMinutes(meta);
+  return n != null ? String(n) : "";
+}
+
+function priceFromMeta(costLabel: string): string {
+  const n = parsePriceLkr(costLabel);
+  return n != null && n > 0 ? String(n) : "";
+}
+
+function validateDurationValue(value: string): string | null {
+  if (!value.trim()) return "Duration is required.";
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n)) return "Enter a valid duration.";
+  if (n < DURATION_MIN || n > DURATION_MAX) {
+    return `Duration must be between ${DURATION_MIN} and ${DURATION_MAX} minutes.`;
+  }
+  return null;
+}
+
+function validatePriceValue(value: string): string | null {
+  if (!value.trim()) return "Cost is required.";
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n)) return "Enter a valid cost.";
+  if (n < PRICE_MIN || n > PRICE_MAX) {
+    return `Cost must be between Rs. ${PRICE_MIN.toLocaleString("en-LK")} and Rs. ${PRICE_MAX.toLocaleString("en-LK")}.`;
+  }
+  return null;
 }
 
 const inputClass =
   "h-12 w-full rounded-xl border-none bg-mgmt-surface-container-low px-4 text-mgmt-on-surface transition-all focus:bg-mgmt-surface-container-lowest focus:ring-2 focus:ring-mgmt-primary/20 focus:outline-none";
 
-const textareaClass =
-  "min-h-[120px] w-full resize-y rounded-xl border-none bg-mgmt-surface-container-low px-4 py-3 text-mgmt-on-surface transition-all focus:bg-mgmt-surface-container-lowest focus:ring-2 focus:ring-mgmt-primary/20 focus:outline-none";
-
 const labelClass = "text-sm font-semibold text-mgmt-on-surface";
 
-const PLACEHOLDER_DESCRIPTION =
-  "One-on-one session focused on emotional wellbeing, coping strategies, and personalised therapeutic support.";
+const prefixInputWrapClass =
+  "flex h-12 overflow-hidden rounded-xl border-none bg-mgmt-surface-container-low ring-1 ring-transparent transition-all focus-within:bg-mgmt-surface-container-lowest focus-within:ring-2 focus-within:ring-mgmt-primary/20";
+
+const prefixLabelClass =
+  "flex shrink-0 items-center border-r border-mgmt-outline-variant/25 bg-mgmt-surface-container-low px-3 text-sm font-medium text-mgmt-on-surface-variant";
+
+const prefixInputClass =
+  "min-w-0 flex-1 bg-transparent px-4 text-sm text-mgmt-on-surface outline-none disabled:opacity-60";
+
+const fieldHintClass = "text-xs text-mgmt-on-surface-variant";
+
+const fieldErrorClass = "text-xs text-red-600";
 
 type Props = {
   /** When `null`, the modal opens in “add new service” mode with empty defaults. */
   service: EditTherapistServiceModalItem | null;
+  /** Pre-select service category when creating from a category page. */
+  defaultCategoryId?: string;
   onClose: () => void;
   onSaved?: () => void;
 };
 
-export default function EditTherapistServiceModal({ service, onClose, onSaved }: Props) {
+export default function EditTherapistServiceModal({
+  service,
+  defaultCategoryId,
+  onClose,
+  onSaved,
+}: Props) {
   const isCreate = service === null;
   const titleId = useId();
-  const parsed = parseMeta(service?.meta ?? "");
+
   const [categoryId, setCategoryId] = useState(
-    () => service?.categoryId ?? PLACEHOLDER_CATEGORIES[0]!.id,
+    () => service?.categoryId ?? defaultCategoryId ?? "",
   );
-  const [therapistId, setTherapistId] = useState(
-    () => service?.therapistId ?? PLACEHOLDER_THERAPISTS[0]!.id,
-  );
-  const [duration, setDuration] = useState(parsed.duration);
-  const [cost, setCost] = useState(parsed.costLabel);
-  const [description, setDescription] = useState(
-    () => service?.description ?? (isCreate ? "" : PLACEHOLDER_DESCRIPTION),
-  );
-  const [payment, setPayment] = useState<"Stripe" | "PayPal">("Stripe");
+  const [therapistId, setTherapistId] = useState(() => service?.therapistId ?? "");
+  const [duration, setDuration] = useState(() => initialDuration(service));
+  const [cost, setCost] = useState(() => initialCost(service));
+  const [fieldErrors, setFieldErrors] = useState<{
+    duration?: string;
+    cost?: string;
+  }>({});
+  const [serviceOptions, setServiceOptions] = useState<ServiceOption[]>([]);
+  const [servicesLoading, setServicesLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  const { therapists, loading: therapistsLoading } = useAdminTherapists();
+
+  useEffect(() => {
+    const ac = new AbortController();
+    setServicesLoading(true);
+    (async () => {
+      try {
+        const res = await fetch("/api/v1/admin/services", {
+          method: "GET",
+          cache: "no-store",
+          signal: ac.signal,
+        });
+        const json = (await res.json()) as {
+          status?: string;
+          data?: { items?: Array<{ service_id?: string; name?: string; description?: string | null }> };
+        };
+        if (!res.ok || json?.status !== "success" || !json?.data?.items) return;
+        setServiceOptions(
+          json.data.items
+            .map((s) => ({
+              id: String(s.service_id ?? ""),
+              label: String(s.name ?? "—"),
+              description:
+                typeof s.description === "string" && s.description.trim()
+                  ? s.description.trim()
+                  : undefined,
+            }))
+            .filter((o) => o.id),
+        );
+      } catch {
+        /* ignore */
+      } finally {
+        if (!ac.signal.aborted) setServicesLoading(false);
+      }
+    })();
+    return () => ac.abort();
+  }, []);
+
+  useEffect(() => {
+    if (categoryId || serviceOptions.length === 0) return;
+    const preferred = defaultCategoryId && serviceOptions.some((s) => s.id === defaultCategoryId)
+      ? defaultCategoryId
+      : serviceOptions[0]!.id;
+    setCategoryId(preferred);
+  }, [categoryId, serviceOptions, defaultCategoryId]);
+
+  useEffect(() => {
+    if (therapistId || therapists.length === 0) return;
+    setTherapistId(therapists[0]!.id);
+  }, [therapistId, therapists]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -90,19 +222,104 @@ export default function EditTherapistServiceModal({ service, onClose, onSaved }:
     };
   }, []);
 
-  function onDelete() {
+  async function confirmDelete() {
     if (isCreate || !service) return;
-    const ok = window.confirm("Delete this service?");
-    if (!ok) return;
-    onSaved?.();
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(
+        `/api/v1/admin/therapist-services/${encodeURIComponent(service.id)}`,
+        { method: "DELETE", cache: "no-store" },
+      );
+      const json = (await res.json()) as {
+        status?: string;
+        message?: string;
+        errors?: Array<{ field?: string; message?: string }>;
+      };
+      if (!res.ok || json?.status !== "success") {
+        throw new Error(
+          formatApiErrorMessage(json, `Delete failed (HTTP ${res.status})`),
+        );
+      }
+      setDeleteConfirmOpen(false);
+      onSaved?.();
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Failed to delete service");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  function onSave() {
-    if (!categoryId || !therapistId) return;
-    onSaved?.();
+  async function onSave() {
+    if (!canSave) return;
+
+    const durationError = validateDurationValue(duration);
+    const costError = validatePriceValue(cost);
+    if (durationError || costError) {
+      setFieldErrors({
+        duration: durationError ?? undefined,
+        cost: costError ?? undefined,
+      });
+      setErrorMsg(durationError ?? costError ?? "Please fix the highlighted fields.");
+      return;
+    }
+
+    const durationMinutes = Number.parseInt(duration, 10);
+    const priceLkr = Number.parseInt(cost, 10);
+
+    setSubmitting(true);
+    setErrorMsg(null);
+    setFieldErrors({});
+    try {
+      const payload = {
+        therapistId,
+        serviceId: categoryId,
+        durationMinutes,
+        priceLkr,
+        isActive: true,
+      };
+
+      const res = isCreate
+        ? await fetch("/api/v1/admin/therapist-services", {
+            method: "POST",
+            cache: "no-store",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+        : await fetch(`/api/v1/admin/therapist-services/${encodeURIComponent(service!.id)}`, {
+            method: "PATCH",
+            cache: "no-store",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+      const json = (await res.json()) as {
+        status?: string;
+        message?: string;
+        errors?: Array<{ field?: string; message?: string }>;
+      };
+      if (!res.ok || json?.status !== "success") {
+        throw new Error(formatApiErrorMessage(json, `Save failed (HTTP ${res.status})`));
+      }
+      onSaved?.();
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Failed to save service");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  const canSave = Boolean(categoryId && therapistId && duration.trim() && cost.trim());
+  const canSave = Boolean(
+    categoryId &&
+      therapistId &&
+      duration.trim() &&
+      cost.trim() &&
+      !validateDurationValue(duration) &&
+      !validatePriceValue(cost) &&
+      !submitting &&
+      !servicesLoading &&
+      !therapistsLoading,
+  );
 
   return (
     <div className="fixed inset-0 z-[100] overflow-y-auto bg-mgmt-inverse-surface/10 backdrop-blur-[2px]">
@@ -136,6 +353,11 @@ export default function EditTherapistServiceModal({ service, onClose, onSaved }:
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
+            {errorMsg ? (
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {errorMsg}
+              </div>
+            ) : null}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
                 <label className={labelClass} htmlFor="therapist-service-category">
@@ -145,13 +367,20 @@ export default function EditTherapistServiceModal({ service, onClose, onSaved }:
                   id="therapist-service-category"
                   value={categoryId}
                   onChange={(e) => setCategoryId(e.target.value)}
+                  disabled={servicesLoading}
                   className={inputClass}
                 >
-                  {PLACEHOLDER_CATEGORIES.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.label}
-                    </option>
-                  ))}
+                  {servicesLoading ? (
+                    <option value="">Loading services…</option>
+                  ) : serviceOptions.length === 0 ? (
+                    <option value="">No service types available</option>
+                  ) : (
+                    serviceOptions.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.label}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -163,13 +392,20 @@ export default function EditTherapistServiceModal({ service, onClose, onSaved }:
                   id="therapist-service-therapist"
                   value={therapistId}
                   onChange={(e) => setTherapistId(e.target.value)}
+                  disabled={therapistsLoading}
                   className={inputClass}
                 >
-                  {PLACEHOLDER_THERAPISTS.map((therapist) => (
-                    <option key={therapist.id} value={therapist.id}>
-                      {therapist.label}
-                    </option>
-                  ))}
+                  {therapistsLoading ? (
+                    <option value="">Loading therapists…</option>
+                  ) : therapists.length === 0 ? (
+                    <option value="">No therapists available</option>
+                  ) : (
+                    therapists.map((therapist) => (
+                      <option key={therapist.id} value={therapist.id}>
+                        {therapist.name}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -177,28 +413,69 @@ export default function EditTherapistServiceModal({ service, onClose, onSaved }:
                 <label className={labelClass} htmlFor="therapist-service-duration">
                   Duration
                 </label>
-                <input
-                  id="therapist-service-duration"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  className={inputClass}
-                  placeholder="60 mins"
-                />
+                <div className={prefixInputWrapClass}>
+                  <span className={prefixLabelClass}>mins</span>
+                  <input
+                    id="therapist-service-duration"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={duration}
+                    onChange={(e) => {
+                      setDuration(digitsOnly(e.target.value, 4));
+                      setFieldErrors((prev) => ({ ...prev, duration: undefined }));
+                    }}
+                    onBlur={() => {
+                      const message = validateDurationValue(duration);
+                      setFieldErrors((prev) => ({ ...prev, duration: message ?? undefined }));
+                    }}
+                    className={prefixInputClass}
+                    placeholder="60"
+                    aria-invalid={Boolean(fieldErrors.duration)}
+                    aria-describedby="therapist-service-duration-hint"
+                  />
+                </div>
+                <p id="therapist-service-duration-hint" className={fieldHintClass}>
+                  {DURATION_MIN}–{DURATION_MAX} minutes
+                </p>
+                {fieldErrors.duration ? (
+                  <p className={fieldErrorClass}>{fieldErrors.duration}</p>
+                ) : null}
               </div>
 
               <div className="space-y-2">
                 <label className={labelClass} htmlFor="therapist-service-cost">
                   Cost
                 </label>
-                <input
-                  id="therapist-service-cost"
-                  value={cost}
-                  onChange={(e) => setCost(e.target.value)}
-                  className={inputClass}
-                  placeholder="Rs 3,500"
-                />
+                <div className={prefixInputWrapClass}>
+                  <span className={prefixLabelClass}>Rs.</span>
+                  <input
+                    id="therapist-service-cost"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={cost}
+                    onChange={(e) => {
+                      setCost(digitsOnly(e.target.value, 6));
+                      setFieldErrors((prev) => ({ ...prev, cost: undefined }));
+                    }}
+                    onBlur={() => {
+                      const message = validatePriceValue(cost);
+                      setFieldErrors((prev) => ({ ...prev, cost: message ?? undefined }));
+                    }}
+                    className={prefixInputClass}
+                    placeholder="3500"
+                    aria-invalid={Boolean(fieldErrors.cost)}
+                    aria-describedby="therapist-service-cost-hint"
+                  />
+                </div>
+                <p id="therapist-service-cost-hint" className={fieldHintClass}>
+                  Rs. {PRICE_MIN.toLocaleString("en-LK")}–{PRICE_MAX.toLocaleString("en-LK")}
+                </p>
+                {fieldErrors.cost ? <p className={fieldErrorClass}>{fieldErrors.cost}</p> : null}
               </div>
 
+              {/* Description is category-level (services table) — not persisted from this modal yet.
               <div className="space-y-2 md:col-span-2">
                 <label className={labelClass} htmlFor="therapist-service-description">
                   Description
@@ -212,48 +489,8 @@ export default function EditTherapistServiceModal({ service, onClose, onSaved }:
                   rows={4}
                 />
               </div>
+              */}
             </div>
-
-            {/* <div className="mt-10">
-              <h3 className="text-sm font-bold uppercase tracking-widest text-mgmt-on-surface-variant">
-                Payments
-              </h3>
-              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => setPayment("Stripe")}
-                  className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
-                    payment === "Stripe"
-                      ? "border-mgmt-primary bg-mgmt-surface-container-lowest"
-                      : "border-mgmt-outline-variant/30 bg-white hover:bg-mgmt-surface-container-lowest"
-                  }`}
-                >
-                  <img src={STRIPE_IMG} alt="Stripe" className="h-10 w-10 rounded-xl object-cover" />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-mgmt-on-surface">Stripe</p>
-                    <p className="text-xs text-mgmt-on-surface-variant">Credit cards & subscriptions</p>
-                  </div>
-                  {payment === "Stripe" && <MaterialSymbol name="check_circle" className="text-mgmt-primary" filled />}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPayment("PayPal")}
-                  className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors ${
-                    payment === "PayPal"
-                      ? "border-mgmt-primary bg-mgmt-surface-container-lowest"
-                      : "border-mgmt-outline-variant/30 bg-white hover:bg-mgmt-surface-container-lowest"
-                  }`}
-                >
-                  <img src={PAYPAL_IMG} alt="PayPal" className="h-10 w-10 rounded-xl object-cover" />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-mgmt-on-surface">PayPal</p>
-                    <p className="text-xs text-mgmt-on-surface-variant">Wallet and cards</p>
-                  </div>
-                  {payment === "PayPal" && <MaterialSymbol name="check_circle" className="text-mgmt-primary" filled />}
-                </button>
-              </div>
-            </div> */}
           </div>
 
           <footer className="flex items-center justify-between gap-3 border-t border-mgmt-outline-variant/20 bg-white px-8 py-5">
@@ -261,8 +498,9 @@ export default function EditTherapistServiceModal({ service, onClose, onSaved }:
               {!isCreate && (
                 <button
                   type="button"
-                  onClick={onDelete}
-                  className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50 active:scale-[0.99]"
+                  onClick={() => setDeleteConfirmOpen(true)}
+                  disabled={submitting}
+                  className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50 active:scale-[0.99] disabled:opacity-40"
                 >
                   Delete
                 </button>
@@ -272,22 +510,37 @@ export default function EditTherapistServiceModal({ service, onClose, onSaved }:
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-mgmt-on-surface-variant hover:bg-mgmt-surface-container-low"
+                disabled={submitting}
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-mgmt-on-surface-variant hover:bg-mgmt-surface-container-low disabled:opacity-40"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 disabled={!canSave}
-                onClick={onSave}
+                onClick={() => void onSave()}
                 className="rounded-xl bg-mgmt-primary px-5 py-2 text-sm font-bold text-mgmt-on-primary transition-transform active:scale-95 disabled:opacity-40"
               >
-                Save
+                {submitting ? "Saving…" : "Save"}
               </button>
             </div>
           </footer>
         </div>
       </div>
+
+      {deleteConfirmOpen && service ? (
+        <ConfirmationModal
+          title="Delete service"
+          description={`Are you sure you want to delete "${service.title}"? This cannot be undone.`}
+          confirmLabel="Yes, delete"
+          disableDismiss={submitting}
+          onClose={() => {
+            if (submitting) return;
+            setDeleteConfirmOpen(false);
+          }}
+          onConfirm={confirmDelete}
+        />
+      ) : null}
     </div>
   );
 }

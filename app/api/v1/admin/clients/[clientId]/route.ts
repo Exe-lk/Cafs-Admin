@@ -88,3 +88,34 @@ export async function PUT(
   return res;
 }
 
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ clientId: string }> },
+) {
+  const { clientId } = await params;
+  const auth = await getAuthContext(_request);
+  if (!auth.ok) return err("Unauthorized", 401);
+  const roleCheck = await requireRoleService(auth.ctx.user.id, [
+    "admin",
+    "front_office",
+  ]);
+  if (!roleCheck.ok) return err("Forbidden", 403);
+
+  const adminSupabase = createSupabaseServiceRoleClient();
+  const now = new Date().toISOString();
+
+  const { data, error } = await adminSupabase
+    .from("profiles")
+    .update({ is_active: false, updated_at: now })
+    .eq("user_id", clientId)
+    .eq("role", "client")
+    .select("user_id")
+    .maybeSingle();
+  if (error) return err(error.message, 400);
+  if (!data) return err("Client not found", 404);
+
+  const res = ok(null, "Client deleted successfully");
+  res.headers.set("Cache-Control", "no-store");
+  return res;
+}
+

@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ConfirmationModal from "@/components/admin/ConfirmationModal";
 import EditTherapistClassModal, {
   type EditTherapistClassModalItem,
 } from "@/components/admin/EditTherapistClassModal";
+import ListItemActionsMenu from "@/components/admin/ListItemActionsMenu";
 import { useAdminTherapists } from "@/components/admin/useAdminTherapists";
 
-type ClassItem = EditTherapistClassModalItem;
-
+type ClassItem = EditTherapistClassModalItem & {
+  isActive: boolean;
+};
 type ClassModalState = "closed" | "create" | ClassItem;
 
 function SearchIcon({ className }: { className?: string }) {
@@ -18,32 +21,6 @@ function SearchIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0 1 14 0z"
-      />
-    </svg>
-  );
-}
-
-function UploadIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-      />
-    </svg>
-  );
-}
-
-function ListIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"
       />
     </svg>
   );
@@ -65,12 +42,15 @@ function LinkIcon({ className }: { className?: string }) {
 const filterSelectClass =
   "block w-full rounded-lg border border-mgmt-outline-variant bg-mgmt-surface-container-low py-2 px-3 text-sm text-mgmt-on-surface focus:border-mgmt-on-surface-variant focus:ring-1 focus:ring-mgmt-outline-variant focus:outline-none sm:min-w-[200px] sm:w-auto";
 
-function MoreVerticalIcon({ className }: { className?: string }) {
+function ListIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden>
-      <circle cx="12" cy="5" r="1.5" />
-      <circle cx="12" cy="12" r="1.5" />
-      <circle cx="12" cy="19" r="1.5" />
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"
+      />
     </svg>
   );
 }
@@ -84,6 +64,8 @@ export default function AdminClassesHome() {
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [actionsMenuId, setActionsMenuId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ClassItem | null>(null);
 
   const copyLink = useCallback(async (id: string, slug: string) => {
     const url = `${typeof window !== "undefined" ? window.location.origin : ""}/book/class/${slug}`;
@@ -145,6 +127,8 @@ export default function AdminClassesHome() {
             startAt: typeof c.start_at === "string" ? c.start_at : undefined,
             endAt: typeof c.end_at === "string" ? c.end_at : undefined,
             capacity: typeof c.capacity === "number" ? String(c.capacity) : undefined,
+            description: typeof c.description === "string" ? c.description : undefined,
+            isActive: c.is_active !== false,
           };
         });
         setClasses(next);
@@ -164,6 +148,26 @@ export default function AdminClassesHome() {
     return cleanup;
   }, [reload]);
 
+  const setClassHidden = useCallback(async (item: ClassItem, hidden: boolean) => {
+    try {
+      const res = await fetch(`/api/v1/admin/classes/${encodeURIComponent(item.id)}`, {
+        method: "PUT",
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ isActive: !hidden }),
+      });
+      const json = (await res.json()) as { status?: string; message?: string };
+      if (!res.ok || json?.status !== "success") {
+        throw new Error(json?.message || `Update failed (HTTP ${res.status})`);
+      }
+      setClasses((prev) =>
+        prev.map((c) => (c.id === item.id ? { ...c, isActive: !hidden } : c)),
+      );
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Failed to update class visibility");
+    }
+  }, []);
+
   return (
     <main
       className="relative flex h-full min-h-0 flex-1 flex-col overflow-y-auto bg-mgmt-surface-container-lowest"
@@ -174,20 +178,38 @@ export default function AdminClassesHome() {
           key={classModal === "create" ? "new-therapist-class" : classModal.id}
           classItem={classModal === "create" ? null : classModal}
           onClose={() => setClassModal("closed")}
-          onSaved={() => setClassModal("closed")}
+          onSaved={() => {
+            setClassModal("closed");
+            reload();
+          }}
+        />
+      ) : null}
+
+      {deleteTarget ? (
+        <ConfirmationModal
+          title="Delete class"
+          description={`Are you sure you want to delete "${deleteTarget.title}"? This cannot be undone.`}
+          confirmLabel="Yes, delete"
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={async () => {
+            const res = await fetch(
+              `/api/v1/admin/classes/${encodeURIComponent(deleteTarget.id)}`,
+              { method: "DELETE", cache: "no-store" },
+            );
+            const json = (await res.json()) as { status?: string; message?: string };
+            if (!res.ok || json?.status !== "success") {
+              setErrorMsg(json?.message || `Delete failed (HTTP ${res.status})`);
+              return;
+            }
+            setDeleteTarget(null);
+            reload();
+          }}
         />
       ) : null}
 
       <header className="sticky top-12 z-10 flex shrink-0 items-center justify-between gap-3 bg-mgmt-surface-container-lowest px-4 py-5 sm:top-0 sm:px-6 lg:px-8 lg:py-6">
         <h1 className="min-w-0 truncate text-xl font-bold text-mgmt-on-surface sm:text-2xl">Classes</h1>
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            className="rounded-lg p-2 text-mgmt-on-surface-variant transition-colors hover:bg-mgmt-surface-container-low hover:text-mgmt-on-surface"
-            aria-label="Upload"
-          >
-            <UploadIcon className="h-6 w-6" />
-          </button>
           <button
             type="button"
             onClick={() => setClassModal("create")}
@@ -244,7 +266,7 @@ export default function AdminClassesHome() {
         {filtered.map((item) => (
           <div
             key={item.id}
-            className="group relative flex items-center justify-between rounded-lg border border-mgmt-outline-variant bg-mgmt-surface-container-lowest p-4 shadow-sm transition-colors hover:border-mgmt-on-surface-variant"
+            className={`group relative flex items-center justify-between rounded-lg border border-mgmt-outline-variant bg-mgmt-surface-container-lowest p-4 shadow-sm transition-colors hover:border-mgmt-on-surface-variant${item.isActive ? "" : " opacity-60"}`}
             data-purpose="class-list-item"
           >
             <div className="absolute inset-y-0 left-0 w-1 rounded-l-lg bg-red-500" aria-hidden />
@@ -278,13 +300,17 @@ export default function AdminClassesHome() {
               >
                 <LinkIcon className="h-4 w-4" />
               </button>
-              <button
-                type="button"
-                className="rounded-lg p-1.5 text-mgmt-on-surface-variant hover:text-mgmt-on-surface"
-                aria-label={`More actions for ${item.title}`}
-              >
-                <MoreVerticalIcon className="h-4 w-4" />
-              </button>
+              <ListItemActionsMenu
+                itemLabel={item.title}
+                open={actionsMenuId === item.id}
+                onOpenChange={(open) => setActionsMenuId(open ? item.id : null)}
+                hidden={!item.isActive}
+                onEdit={() => setClassModal(item)}
+                onHiddenChange={(hidden) => {
+                  void setClassHidden(item, hidden);
+                }}
+                onDelete={() => setDeleteTarget(item)}
+              />
             </div>
           </div>
         ))}

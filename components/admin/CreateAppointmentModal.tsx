@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import BankSlipUploadFields, {
   hasBankSlipUploadIntent,
@@ -180,6 +180,7 @@ export default function CreateAppointmentModal({
     return toTimeInputValue(now);
   });
   const [reminderNotes, setReminderNotes] = useState("");
+  const wasOpenRef = useRef(false);
 
   const scheduleLabel = useMemo(() => {
     const [y, m, d] = date.split("-").map((x) => Number(x));
@@ -291,7 +292,13 @@ export default function CreateAppointmentModal({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
+    }
+    if (wasOpenRef.current) return;
+    wasOpenRef.current = true;
+
     // Defer to avoid setState-in-effect lint rule.
     queueMicrotask(() => {
       setTab("service");

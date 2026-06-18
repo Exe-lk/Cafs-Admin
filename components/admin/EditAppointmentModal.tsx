@@ -7,6 +7,7 @@ import BankSlipUploadFields, {
   submitBankSlipTransfer,
   validateBankSlipFields,
 } from "@/components/admin/BankSlipUploadFields";
+import ConfirmationModal from "@/components/admin/ConfirmationModal";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
 import { useAdminTherapists } from "@/components/admin/useAdminTherapists";
 import {
@@ -61,6 +62,10 @@ export type AdminEditableAppointment = {
 };
 
 const MIN_REJECT_REASON_LEN = 3;
+const MAX_REJECT_REASON_LEN = 500;
+const MAX_VIDEO_LINK_LEN = 2048;
+const MAX_APPOINTMENT_TITLE_LEN = 200;
+const MAX_APPOINTMENT_NOTES_LEN = 2000;
 
 const FIELD_SELECT_CLASS =
   "mt-1 h-10 w-full appearance-none rounded-lg border border-mgmt-outline-variant/20 bg-mgmt-surface-container-low py-2 pl-3 pr-9 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90";
@@ -86,6 +91,7 @@ export default function EditAppointmentModal({
   appointment,
   therapistTimezone,
   readOnly = false,
+  viewFirst = false,
   onClose,
   onSave,
   onDelete,
@@ -94,6 +100,8 @@ export default function EditAppointmentModal({
   appointment: AdminEditableAppointment;
   therapistTimezone?: string;
   readOnly?: boolean;
+  /** When true, modal opens read-only with "Appointment" heading; pen icon switches to edit. */
+  viewFirst?: boolean;
   onClose: () => void;
   onSave: (next: AdminEditableAppointment) => void;
   onDelete: (args: { dayId: string; sessionId: string }) => void;
@@ -108,12 +116,14 @@ export default function EditAppointmentModal({
   const rejectTitleId = useId();
   const timeZone = normalizeTimeZone(therapistTimezone);
   const [draft, setDraft] = useState<AdminEditableAppointment>(appointment);
+  const [isEditing, setIsEditing] = useState(() => !readOnly && !viewFirst);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectSubmitting, setRejectSubmitting] = useState(false);
   const [rejectError, setRejectError] = useState<string | null>(null);
@@ -127,6 +137,7 @@ export default function EditAppointmentModal({
   const isApiBacked = Boolean(appointment.startAt && appointment.endAt);
   const busy = submitting || rejectSubmitting;
   const minBookableDate = minBookableDateInputInTimeZone(timeZone);
+  const effectiveReadOnly = !isEditing;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -137,11 +148,15 @@ export default function EditAppointmentModal({
         setRejectError(null);
         return;
       }
+      if (deleteConfirmOpen) {
+        setDeleteConfirmOpen(false);
+        return;
+      }
       onClose();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose, rejectOpen]);
+  }, [onClose, rejectOpen, deleteConfirmOpen]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -153,12 +168,14 @@ export default function EditAppointmentModal({
 
   useEffect(() => {
     setDraft(appointment);
+    setIsEditing(!readOnly && !viewFirst);
     setRescheduleOpen(false);
     setRescheduleDate("");
     setRescheduleTime("");
     setSubmitting(false);
     setErrorMsg(null);
     setRejectOpen(false);
+    setDeleteConfirmOpen(false);
     setRejectReason("");
     setRejectSubmitting(false);
     setRejectError(null);
@@ -167,7 +184,29 @@ export default function EditAppointmentModal({
     setBankReference("");
     setBankSlipUrl("");
     setBankSlipFile(null);
-  }, [appointment]);
+  }, [appointment, readOnly, viewFirst]);
+
+  async function confirmDelete() {
+    setErrorMsg(null);
+    try {
+      if (isApiBacked) {
+        const res = await fetch(`/api/v1/admin/appointments/${appointment.sessionId}`, {
+          method: "DELETE",
+          cache: "no-store",
+        });
+        const json = (await res.json()) as { status?: string; message?: string };
+        if (!res.ok || json?.status !== "success") {
+          throw new Error(json?.message || `Delete failed (HTTP ${res.status})`);
+        }
+      }
+      onDelete({ dayId: appointment.dayId, sessionId: appointment.sessionId });
+      setDeleteConfirmOpen(false);
+      onClose();
+    } catch (e) {
+      setDeleteConfirmOpen(false);
+      setErrorMsg(e instanceof Error ? e.message : "Failed to delete appointment");
+    }
+  }
 
   const canConfirmReject =
     rejectReason.trim().length >= MIN_REJECT_REASON_LEN && !rejectSubmitting;
@@ -272,7 +311,7 @@ export default function EditAppointmentModal({
         ? "Rejected"
         : "Pending";
   const showApprovalActions =
-    !readOnly &&
+    !effectiveReadOnly &&
     (draft.appointmentStatus === "pending_payment" ||
       draft.appointmentStatus === "pending_confirmation");
   const showBankSlipSection =
@@ -317,7 +356,7 @@ export default function EditAppointmentModal({
         >
           <div className="flex items-center justify-between px-6 pt-5 pb-3">
             <h3 id={titleId} className="text-lg font-semibold text-mgmt-on-surface">
-              {readOnly ? "View appointment" : "Edit appointment"}
+              {isEditing ? "Edit appointment" : "Appointment"}
             </h3>
             <button
               type="button"
@@ -400,8 +439,9 @@ export default function EditAppointmentModal({
                 </label>
                 <input
                   value={draft.title}
-                  readOnly={readOnly}
-                  disabled={readOnly}
+                  readOnly={effectiveReadOnly}
+                  disabled={effectiveReadOnly}
+                  maxLength={MAX_APPOINTMENT_TITLE_LEN}
                   onChange={(e) => setDraft((p) => ({ ...p, title: e.target.value }))}
                   className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="Appointment title…"
@@ -415,7 +455,7 @@ export default function EditAppointmentModal({
                 <div className="relative">
                   <select
                     value={draft.therapistId ?? ""}
-                    disabled={readOnly || therapistsLoading}
+                    disabled={effectiveReadOnly || therapistsLoading}
                     onChange={(e) => {
                       const therapistId = e.target.value;
                       const therapistName =
@@ -447,7 +487,7 @@ export default function EditAppointmentModal({
                 <div className="relative">
                   <select
                     value={draft.appointmentStatus ?? ""}
-                    disabled={readOnly}
+                    disabled={effectiveReadOnly}
                     onChange={(e) => {
                       const appointmentStatus = e.target.value as DbAppointmentStatus;
                       setDraft((p) => ({
@@ -480,8 +520,8 @@ export default function EditAppointmentModal({
                 </label>
                 <input
                   value={draft.timeRange}
-                  readOnly={readOnly}
-                  disabled={readOnly}
+                  readOnly={effectiveReadOnly}
+                  disabled={effectiveReadOnly}
                   onChange={(e) => setDraft((p) => ({ ...p, timeRange: e.target.value }))}
                   className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="e.g. 2:00PM – 3:00PM"
@@ -494,8 +534,8 @@ export default function EditAppointmentModal({
                 </label>
                 <input
                   value={draft.dateLine}
-                  readOnly={readOnly}
-                  disabled={readOnly}
+                  readOnly={effectiveReadOnly}
+                  disabled={effectiveReadOnly}
                   onChange={(e) => setDraft((p) => ({ ...p, dateLine: e.target.value }))}
                   className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="e.g. 6 JAN, TUE"
@@ -508,8 +548,9 @@ export default function EditAppointmentModal({
                 </label>
                 <input
                   value={draft.videoLink ?? ""}
-                  readOnly={readOnly}
-                  disabled={readOnly}
+                  readOnly={effectiveReadOnly}
+                  disabled={effectiveReadOnly}
+                  maxLength={MAX_VIDEO_LINK_LEN}
                   onChange={(e) => setDraft((p) => ({ ...p, videoLink: e.target.value }))}
                   className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="Paste meeting URL…"
@@ -519,7 +560,7 @@ export default function EditAppointmentModal({
               {showBankSlipSection ? (
                 <div className="sm:col-span-2">
                   <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
-                    Bank slip {readOnly ? "" : "(optional)"}
+                    Bank slip {effectiveReadOnly ? "" : "(optional)"}
                   </label>
                   <div className="mt-2">
                     <BankSlipUploadFields
@@ -531,7 +572,7 @@ export default function EditAppointmentModal({
                       onFileChange={setBankSlipFile}
                       disabled={busy}
                       existingProofUrl={draft.proofUrl}
-                      readOnly={readOnly}
+                      readOnly={effectiveReadOnly}
                     />
                   </div>
                 </div>
@@ -561,8 +602,9 @@ export default function EditAppointmentModal({
                 </label>
                 <textarea
                   value={draft.notes ?? ""}
-                  readOnly={readOnly}
-                  disabled={readOnly}
+                  readOnly={effectiveReadOnly}
+                  disabled={effectiveReadOnly}
+                  maxLength={MAX_APPOINTMENT_NOTES_LEN}
                   onChange={(e) => setDraft((p) => ({ ...p, notes: e.target.value }))}
                   className="mt-1 min-h-24 w-full resize-none rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
                   placeholder="Type notes…"
@@ -570,7 +612,7 @@ export default function EditAppointmentModal({
               </div>
             </div>
 
-            {!readOnly ? (
+            {!effectiveReadOnly ? (
             <div className="rounded-xl border border-mgmt-outline-variant/15 bg-white">
               <button
                 type="button"
@@ -646,14 +688,25 @@ export default function EditAppointmentModal({
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-mgmt-surface-container-low p-4">
-            {readOnly || tab === "history" ? (
-              <div className="flex w-full justify-end">
+            {effectiveReadOnly ? (
+              <div className="flex w-full items-center justify-end gap-3">
                 <button
                   type="button"
-                  className="rounded-xl bg-mgmt-primary px-4 py-2.5 text-sm font-semibold text-mgmt-on-primary transition-opacity hover:opacity-90"
+                  onClick={() => {
+                    setTab("details");
+                    setIsEditing(true);
+                  }}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-mgmt-outline-variant/20 bg-mgmt-surface-container-low text-mgmt-on-surface transition-colors hover:bg-mgmt-surface-container"
+                  aria-label="Edit appointment"
+                >
+                  <MaterialSymbol name="edit" className="text-[20px]" />
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl px-4 py-2.5 text-sm font-semibold text-mgmt-on-surface-variant transition-colors hover:bg-mgmt-surface-container-low"
                   onClick={onClose}
                 >
-                  Close
+                  Cancel
                 </button>
               </div>
             ) : (
@@ -665,33 +718,7 @@ export default function EditAppointmentModal({
                 "border-red-500/30 bg-red-500/10 text-red-600 hover:bg-red-500/15 dark:text-red-400",
               )}
               disabled={busy}
-              onClick={() => {
-                const ok = window.confirm("Delete this appointment? This action cannot be undone.");
-                if (!ok) return;
-                setSubmitting(true);
-                setErrorMsg(null);
-                (async () => {
-                  try {
-                    // If this is a real appointment from the admin calendar API, sessionId is appointmentId.
-                    if (appointment.startAt && appointment.endAt) {
-                      const res = await fetch(`/api/v1/admin/appointments/${appointment.sessionId}`, {
-                        method: "DELETE",
-                        cache: "no-store",
-                      });
-                      const json = (await res.json()) as any;
-                      if (!res.ok || json?.status !== "success") {
-                        throw new Error(json?.message || `Delete failed (HTTP ${res.status})`);
-                      }
-                    }
-                    onDelete({ dayId: appointment.dayId, sessionId: appointment.sessionId });
-                    onClose();
-                  } catch (e) {
-                    setErrorMsg(e instanceof Error ? e.message : "Failed to delete appointment");
-                  } finally {
-                    setSubmitting(false);
-                  }
-                })();
-              }}
+              onClick={() => setDeleteConfirmOpen(true)}
             >
               Delete Appointment
             </button>
@@ -700,7 +727,21 @@ export default function EditAppointmentModal({
               <button
                 type="button"
                 className="rounded-xl px-4 py-2.5 text-sm font-semibold text-mgmt-on-surface-variant transition-colors hover:bg-mgmt-surface-container-low"
-                onClick={onClose}
+                onClick={() => {
+                  if (viewFirst || readOnly) {
+                    setDraft(appointment);
+                    setRescheduleOpen(false);
+                    setRescheduleDate("");
+                    setRescheduleTime("");
+                    setErrorMsg(null);
+                    setBankReference("");
+                    setBankSlipUrl("");
+                    setBankSlipFile(null);
+                    setIsEditing(false);
+                    return;
+                  }
+                  onClose();
+                }}
               >
                 Cancel
               </button>
@@ -806,6 +847,15 @@ export default function EditAppointmentModal({
         </div>
       </div>
 
+      {deleteConfirmOpen ? (
+        <ConfirmationModal
+          title={`Delete ${draft.title.trim() || "appointment"}?`}
+          description="This appointment will be permanently removed. This action cannot be undone."
+          onClose={() => setDeleteConfirmOpen(false)}
+          onConfirm={confirmDelete}
+        />
+      ) : null}
+
       {rejectOpen ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
           <button
@@ -844,12 +894,13 @@ export default function EditAppointmentModal({
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               disabled={rejectSubmitting}
+              maxLength={MAX_REJECT_REASON_LEN}
               className="mt-1 min-h-28 w-full resize-none rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:opacity-60"
               placeholder="Explain why this appointment cannot be confirmed…"
               autoFocus
             />
             <p className="mt-1 text-xs text-mgmt-on-surface-variant">
-              At least {MIN_REJECT_REASON_LEN} characters required.
+              {MIN_REJECT_REASON_LEN}–{MAX_REJECT_REASON_LEN} characters required.
             </p>
             <div className="mt-5 flex justify-end gap-3">
               <button

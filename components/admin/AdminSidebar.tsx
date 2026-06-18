@@ -6,7 +6,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
-import { useAdminProfile } from "@/components/admin/useAdminProfile";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -50,7 +49,7 @@ const NAV_ENTRIES: NavEntry[] = [
     icon: "calendar_today",
     children: [{ href: "/admin/appointments", label: "Appointments", icon: "event_note" }],
   },
-  { kind: "link", href: "/admin/service-types", label: "Service Categories", icon: "bookmarks" },
+  // { kind: "link", href: "/admin/service-types", label: "Service Categories", icon: "bookmarks" },
   { kind: "link", href: "/admin/services", label: "Services", icon: "format_list_bulleted" },
   { kind: "link", href: "/admin/customers", label: "Customers", icon: "sentiment_satisfied" },
   { kind: "link", href: "/admin/theraphist", label: "Therapists", icon: "stethoscope" },
@@ -58,6 +57,7 @@ const NAV_ENTRIES: NavEntry[] = [
 ];
 
 const NAV_ICON_SIZE = 18;
+const CALENDAR_NAV_ICON_SIZE = 16;
 const NAV_CHILD_ICON_SIZE = 18;
 const SIDEBAR_CONTROL_ICON_SIZE = 25;
 
@@ -73,6 +73,24 @@ function linkClass(active: boolean, collapsed: boolean) {
     "flex items-center rounded-lg transition-all duration-150 ease-in-out",
     collapsed ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2.5",
     active ? NAV_ITEM_BG_ACTIVE : NAV_ITEM_BG_HOVER,
+  );
+}
+
+function CalendarNavIcon({ size = CALENDAR_NAV_ICON_SIZE }: { size?: number }) {
+  const day = new Date().getDate();
+  const fontSize = day >= 10 ? Math.round(size * 0.48) : Math.round(size * 0.55);
+
+  return (
+    <span
+      className={cx(
+        "inline-flex shrink-0 items-center justify-center rounded-md border-2 border-current bg-white font-semibold tabular-nums leading-none",
+        NAV_ICON_CLASS,
+      )}
+      style={{ width: size, height: size, fontSize }}
+      aria-hidden
+    >
+      {day}
+    </span>
   );
 }
 
@@ -104,7 +122,7 @@ function CalendarNavGroup({
         className={linkClass(calendarActive, true)}
         title={entry.label}
       >
-        <MaterialSymbol name={entry.icon} size={NAV_ICON_SIZE} className={NAV_ICON_CLASS} />
+        <CalendarNavIcon />
       </Link>
     );
   }
@@ -122,7 +140,7 @@ function CalendarNavGroup({
           onClick={() => onNavigate?.()}
           className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors"
         >
-          <MaterialSymbol name={entry.icon} size={NAV_ICON_SIZE} className={NAV_ICON_CLASS} />
+          <CalendarNavIcon />
           <span className={NAV_ITEM_LABEL}>{entry.label}</span>
         </Link>
         <button
@@ -186,7 +204,11 @@ export default function AdminSidebar({
   onToggleCollapse?: () => void;
 }) {
   const pathname = usePathname();
-  const { displayName, initials, loading: profileLoading } = useAdminProfile();
+
+  function handleLogout() {
+    onNavigate?.();
+    window.location.href = "/api/auth/admin/logout";
+  }
 
   return (
     <aside
@@ -287,35 +309,17 @@ export default function AdminSidebar({
         })}
       </nav>
 
-      <div className={cx("mt-4 shrink-0 border-slate-200 pt-4", collapsed ? "px-0" : "px-2")}>
-        <div
-          className={cx(
-            "flex items-center rounded-lg py-2",
-            collapsed ? "justify-center px-0" : "gap-3 px-2",
-          )}
-          title={collapsed && !profileLoading ? displayName : undefined}
+      <div className={cx("mt-4 shrink-0 border-t border-slate-200 pt-4", collapsed ? "px-0" : "px-2")}>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className={cx(linkClass(false, collapsed), "w-full text-left")}
+          title={collapsed ? "Logout" : undefined}
+          aria-label="Logout"
         >
-          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#E7E7E7] text-sm font-bold text-[#5F5F5F]">
-            {profileLoading ? (
-              <MaterialSymbol name="account_circle" size={SIDEBAR_CONTROL_ICON_SIZE} className="text-[#5F5F5F]" />
-            ) : (
-              initials
-            )}
-            {collapsed ? (
-              <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full border border-white bg-emerald-500" />
-            ) : null}
-          </div>
-          {!collapsed ? (
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-slate-900">
-                {profileLoading ? "Loading…" : displayName}
-              </p>
-              <p className="truncate text-[0.65rem] font-medium uppercase tracking-[0.08em] text-slate-600">
-                Profile
-              </p>
-            </div>
-          ) : null}
-        </div>
+          <MaterialSymbol name="logout" size={NAV_ICON_SIZE} className={NAV_ICON_CLASS} />
+          {!collapsed ? <span className={NAV_ITEM_LABEL}>Logout</span> : null}
+        </button>
       </div>
     </aside>
   );

@@ -121,8 +121,6 @@ export default function TheraphistHomePage() {
 
               onSelectedIdsChange={setSelectedIds}
 
-              onAdd={() => setCreateTherapistOpen(true)}
-
               onCollapse={() => setTeamPanelOpen(false)}
 
             />

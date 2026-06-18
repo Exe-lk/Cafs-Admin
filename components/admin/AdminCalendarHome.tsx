@@ -706,6 +706,7 @@ export default function AdminCalendarHome({
         <EditAppointmentModal
           appointment={selected}
           therapistTimezone={timeZone}
+          viewFirst
           onClose={() => setEditOpen(false)}
           onDelete={({ sessionId }) => {
             setEvents((prev) => prev.filter((e) => e.id !== sessionId));

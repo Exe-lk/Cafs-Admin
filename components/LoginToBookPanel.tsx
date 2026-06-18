@@ -91,7 +91,7 @@ export default function LoginToBookPanel({
 
       <div className="max-w-md w-full text-center">
         <h1 className="text-3xl font-bold tracking-tight mb-12">
-          Login to book online
+          Log in to your account
         </h1>
 
         <div className="flex justify-center gap-6 mb-10">
@@ -112,16 +112,16 @@ export default function LoginToBookPanel({
 
         <div className="flex items-center gap-4 mb-10 text-white/40 uppercase tracking-widest text-[10px] font-bold">
           <div className="h-px flex-1 bg-dark-border/60" />
-          <span>or</span>
+          {/* <span>or</span> */}
           <div className="h-px flex-1 bg-dark-border/60" />
         </div>
 
-        <button
+        {/* <button
           type="button"
           className="w-full py-4 px-6 bg-cafs-black text-white font-semibold rounded-full hover:bg-neutral-800 transition-all active:scale-[0.98] shadow-lg shadow-black/30"
         >
           Create profile
-        </button>
+        </button> */}
 
         <p className="mt-8 text-gray-400 text-sm">
           Need help?{" "}

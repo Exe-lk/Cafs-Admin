@@ -1,12 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
+import EditServiceModal from "@/components/admin/EditServiceModal";
+import {
+  notifyServiceCategoriesReload,
+  serviceCategoryHref,
+  serviceCategoryLabel,
+} from "@/components/admin/serviceCategories";
 import {
   SECONDARY_NAV_HEADING_CLASS,
   SECONDARY_NAV_HEADING_WRAP_CLASS,
 } from "@/components/admin/secondaryNavLayout";
+import { useAdminServiceCategories } from "@/components/admin/useAdminServiceCategories";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -14,11 +21,20 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 export default function ServicesSubNav() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeCategoryId = searchParams.get("category");
   const onClasses = pathname?.startsWith("/admin/services/classes") ?? false;
+  const { categories, loading, reload } = useAdminServiceCategories();
+  const totalServiceCount = useMemo(
+    () => categories.reduce((sum, category) => sum + category.count, 0),
+    [categories],
+  );
 
   /** When on the services route, user can collapse the list; on classes route the section stays closed. */
   const [servicesCollapsedByUser, setServicesCollapsedByUser] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
   const servicesOpen = !onClasses && !servicesCollapsedByUser;
+  const onServicesIndex = pathname === "/admin/services" && !onClasses;
 
   return (
     <aside
@@ -44,10 +60,12 @@ export default function ServicesSubNav() {
                 "flex min-w-0 flex-1 items-center justify-between px-2 py-2 text-sm font-semibold",
                 onClasses
                   ? "text-mgmt-on-surface-variant hover:text-mgmt-on-surface"
-                  : "text-mgmt-on-surface",
+                  : onServicesIndex && !activeCategoryId
+                    ? "text-mgmt-on-surface"
+                    : "text-mgmt-on-surface",
               )}
             >
-              <span>All services (3)</span>
+              <span>All services ({totalServiceCount})</span>
               {onClasses && (
                 <svg
                   className="h-4 w-4 shrink-0"
@@ -82,17 +100,32 @@ export default function ServicesSubNav() {
           </div>
           {servicesOpen && (
             <div className="mt-2 space-y-2 pl-4">
-              <Link
-                href="/admin/services"
-                className={cx(
-                  "block text-sm hover:text-mgmt-on-surface",
-                  !onClasses ? "font-medium text-mgmt-on-surface" : "text-mgmt-on-surface-variant",
-                )}
-              >
-                Exercise session by … (1)
-              </Link>
+              {loading ? (
+                <p className="text-sm text-mgmt-on-surface-variant">Loading…</p>
+              ) : categories.length === 0 ? (
+                <p className="text-sm text-mgmt-on-surface-variant">No service categories yet.</p>
+              ) : (
+                categories.map((category) => {
+                  const isActive = onServicesIndex && activeCategoryId === category.id;
+                  return (
+                    <Link
+                      key={category.id}
+                      href={serviceCategoryHref(category.id)}
+                      className={cx(
+                        "block text-sm hover:text-mgmt-on-surface",
+                        isActive
+                          ? "font-medium text-mgmt-on-surface"
+                          : "text-mgmt-on-surface-variant",
+                      )}
+                    >
+                      {serviceCategoryLabel(category)}
+                    </Link>
+                  );
+                })
+              )}
               <button
                 type="button"
+                onClick={() => setCategoryOpen(true)}
                 className="flex items-center gap-1 text-sm text-mgmt-on-surface-variant hover:text-mgmt-on-surface"
               >
                 <svg
@@ -109,7 +142,7 @@ export default function ServicesSubNav() {
                     d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                   />
                 </svg>
-                New service
+                New service category
               </button>
             </div>
           )}
@@ -145,6 +178,18 @@ export default function ServicesSubNav() {
           )}
         </div>
       </div>
+
+      {categoryOpen ? (
+        <EditServiceModal
+          service={null}
+          onClose={() => setCategoryOpen(false)}
+          onSaved={() => {
+            setCategoryOpen(false);
+            reload();
+            notifyServiceCategoriesReload();
+          }}
+        />
+      ) : null}
     </aside>
   );
 }

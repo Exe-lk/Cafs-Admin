@@ -18,7 +18,10 @@ type CreateBody = {
 export async function GET(request: NextRequest) {
   const auth = await getAuthContext(request);
   if (!auth.ok) return err("Unauthorized", 401);
-  const roleCheck = await requireRoleService(auth.ctx.user.id, ["admin"]);
+  const roleCheck = await requireRoleService(auth.ctx.user.id, [
+    "admin",
+    "front_office",
+  ]);
   if (!roleCheck.ok) return err("Forbidden", 403);
 
   const adminSupabase = createSupabaseServiceRoleClient();

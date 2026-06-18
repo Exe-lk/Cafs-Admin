@@ -49,6 +49,12 @@ export function getHourInTimeZone(d: Date, timeZone: string): number {
   return Number(parts.find((p) => p.type === "hour")?.value ?? "0");
 }
 
+/** UTC instant for 00:00 on the calendar day of `anchor` in `timeZone`. */
+export function startOfDayUtcInTimeZone(anchor: Date, timeZone: string): Date {
+  const ymd = getYMDInTimeZone(anchor, timeZone);
+  return zonedLocalYmdTimeToUtc(ymd, "00:00", timeZone);
+}
+
 export function getYMDInTimeZone(d: Date, timeZone: string): YMD {
   const dtf = new Intl.DateTimeFormat("en-CA", {
     timeZone,
