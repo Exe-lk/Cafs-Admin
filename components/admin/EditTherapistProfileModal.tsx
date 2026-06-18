@@ -13,6 +13,7 @@ export type AdminTherapistProfile = {
   aboutYou: string;
   hidden: boolean;
   timezone?: string;
+  avatarUrl?: string | null;
 };
 
 function cx(...classes: Array<string | false | null | undefined>) {

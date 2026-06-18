@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import ServiceCategoryModal from "@/components/admin/ServiceCategoryModal";
+import EditServiceModal from "@/components/admin/EditServiceModal";
 import {
+  notifyServiceCategoriesReload,
   serviceCategoryHref,
   serviceCategoryLabel,
 } from "@/components/admin/serviceCategories";
@@ -141,7 +142,7 @@ export default function ServicesSubNav() {
                     d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                   />
                 </svg>
-                New service
+                New service category
               </button>
             </div>
           )}
@@ -179,10 +180,13 @@ export default function ServicesSubNav() {
       </div>
 
       {categoryOpen ? (
-        <ServiceCategoryModal
+        <EditServiceModal
+          service={null}
           onClose={() => setCategoryOpen(false)}
-          onCreate={() => {
+          onSaved={() => {
+            setCategoryOpen(false);
             reload();
+            notifyServiceCategoriesReload();
           }}
         />
       ) : null}

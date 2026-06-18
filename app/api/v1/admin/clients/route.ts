@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
     .from("profiles")
     .select("user_id,role,full_name,email,phone,is_active", { count: "exact" })
     .eq("role", "client")
+    .eq("is_active", true)
     .order("created_at", { ascending: false })
     .range(from, to);
 

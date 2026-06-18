@@ -11,6 +11,7 @@ import EditTherapistServiceModal, {
 import ListItemActionsMenu from "@/components/admin/ListItemActionsMenu";
 import { useAdminServiceCategories } from "@/components/admin/useAdminServiceCategories";
 import { notifyServiceCategoriesReload } from "@/components/admin/serviceCategories";
+import { formatApiErrorMessage } from "@/lib/api/formatApiError";
 
 type ServiceItem = EditTherapistServiceModalItem & {
   highlighted?: boolean;
@@ -32,6 +33,12 @@ function formatServiceMeta(durationMinutes: unknown, priceLkr: unknown): string 
       ? `${Math.floor(durationMinutes)} mins`
       : "—";
   return `${mins} · ${formatPriceLkr(priceLkr)}`;
+}
+
+function toOptionalNumber(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.floor(n) : undefined;
 }
 
 function serviceDisplayTitle(service: ServiceItem) {
@@ -154,6 +161,7 @@ export default function AdminServicesHome() {
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [categoryEditOpen, setCategoryEditOpen] = useState(false);
   const [categoryDeleteOpen, setCategoryDeleteOpen] = useState(false);
+  const [serviceDeleteTarget, setServiceDeleteTarget] = useState<ServiceItem | null>(null);
   const categoryMenuRef = useRef<HTMLDivElement>(null);
 
   // Category edit/delete targets `services` rows (service types), not therapist_services.
@@ -262,6 +270,8 @@ export default function AdminServicesHome() {
             meta: formatServiceMeta(row.duration_minutes, row.price_lkr),
             categoryId: serviceId || undefined,
             therapistId: therapistId || undefined,
+            durationMinutes: toOptionalNumber(row.duration_minutes),
+            priceLkr: toOptionalNumber(row.price_lkr),
             description,
           };
         });
@@ -423,6 +433,40 @@ export default function AdminServicesHome() {
             reloadCategories();
             notifyServiceCategoriesReload();
             router.push("/admin/services");
+          }}
+        />
+      ) : null}
+
+      {serviceDeleteTarget ? (
+        <ConfirmationModal
+          title="Delete service"
+          description={`Are you sure you want to delete "${serviceDisplayTitle(serviceDeleteTarget)}"? This cannot be undone.`}
+          confirmLabel="Yes, delete"
+          onClose={() => setServiceDeleteTarget(null)}
+          onConfirm={async () => {
+            const target = serviceDeleteTarget;
+            const res = await fetch(
+              `/api/v1/admin/therapist-services/${encodeURIComponent(target.id)}`,
+              { method: "DELETE", cache: "no-store" },
+            );
+            const json = (await res.json()) as {
+              status?: string;
+              message?: string;
+              errors?: Array<{ field?: string; message?: string }>;
+            };
+            if (!res.ok || json?.status !== "success") {
+              setErrorMsg(
+                formatApiErrorMessage(json, `Delete failed (HTTP ${res.status})`),
+              );
+              return;
+            }
+            setServiceDeleteTarget(null);
+            setHiddenById((prev) => {
+              const next = { ...prev };
+              delete next[target.id];
+              return next;
+            });
+            reload();
           }}
         />
       ) : null}
@@ -677,26 +721,9 @@ export default function AdminServicesHome() {
                 onHiddenChange={(hidden) =>
                   setHiddenById((prev) => ({ ...prev, [service.id]: hidden }))
                 }
-                onDelete={async () => {
-                  if (!window.confirm(`Delete "${serviceDisplayTitle(service)}"?`)) return;
-                  try {
-                    const res = await fetch(
-                      `/api/v1/admin/therapist-services/${encodeURIComponent(service.id)}`,
-                      { method: "DELETE", cache: "no-store" },
-                    );
-                    const json = (await res.json()) as { status?: string; message?: string };
-                    if (!res.ok || json?.status !== "success") {
-                      throw new Error(json?.message || `Delete failed (HTTP ${res.status})`);
-                    }
-                    reload();
-                  } catch (e) {
-                    setErrorMsg(e instanceof Error ? e.message : "Failed to delete service");
-                  }
-                  setHiddenById((prev) => {
-                    const next = { ...prev };
-                    delete next[service.id];
-                    return next;
-                  });
+                onDelete={() => {
+                  setActionsMenuId(null);
+                  setServiceDeleteTarget(service);
                 }}
               />
             </div>

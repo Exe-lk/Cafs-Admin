@@ -5,6 +5,14 @@ export { BANK_SLIPS_BUCKET };
 
 export const BANK_SLIP_MAX_BYTES = 5 * 1024 * 1024;
 
+/** Typical bank transaction / reference number length. */
+export const BANK_REFERENCE_MIN_LEN = 3;
+export const BANK_REFERENCE_MAX_LEN = 100;
+
+/** Standard max URL length for proof links. */
+export const BANK_SLIP_URL_MIN_LEN = 8;
+export const BANK_SLIP_URL_MAX_LEN = 2048;
+
 export const BANK_SLIP_ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
   "image/png",
@@ -63,11 +71,17 @@ export function validateBankSlipFields(fields: BankSlipFieldValues): string | nu
   const url = fields.bankSlipUrl.trim();
   const hasFile = Boolean(fields.selectedFile);
 
-  if (reference.length < 3) {
-    return "Bank reference must be at least 3 characters.";
+  if (reference.length < BANK_REFERENCE_MIN_LEN) {
+    return `Bank reference must be at least ${BANK_REFERENCE_MIN_LEN} characters.`;
   }
-  if (!hasFile && url.length < 8) {
+  if (reference.length > BANK_REFERENCE_MAX_LEN) {
+    return `Bank reference must be at most ${BANK_REFERENCE_MAX_LEN} characters.`;
+  }
+  if (!hasFile && url.length < BANK_SLIP_URL_MIN_LEN) {
     return "Upload a bank slip file or paste a valid proof URL.";
+  }
+  if (!hasFile && url.length > BANK_SLIP_URL_MAX_LEN) {
+    return `Proof URL must be at most ${BANK_SLIP_URL_MAX_LEN} characters.`;
   }
   if (fields.selectedFile) {
     return validateBankSlipFile(fields.selectedFile);
