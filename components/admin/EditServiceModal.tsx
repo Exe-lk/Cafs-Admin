@@ -7,6 +7,7 @@ export type EditServiceModalService = {
   id: string;
   title: string;
   meta: string;
+  description?: string;
 };
 
 const STRIPE_IMG =
@@ -25,6 +26,9 @@ function parseMeta(meta: string): { duration: string; costLabel: string } {
 
 const inputClass =
   "h-12 w-full rounded-xl border-none bg-mgmt-surface-container-low px-4 text-mgmt-on-surface transition-all focus:bg-mgmt-surface-container-lowest focus:ring-2 focus:ring-mgmt-primary/20 focus:outline-none";
+
+const textareaClass =
+  "min-h-[120px] w-full resize-y rounded-xl border-none bg-mgmt-surface-container-low px-4 py-3 text-mgmt-on-surface transition-all focus:bg-mgmt-surface-container-lowest focus:ring-2 focus:ring-mgmt-primary/20 focus:outline-none";
 
 const labelClass = "text-sm font-semibold text-mgmt-on-surface";
 
@@ -56,9 +60,10 @@ export default function EditServiceModal({ service, onClose, onSaved }: Props) {
   const isCreate = service === null;
   const titleId = useId();
   const [title, setTitle] = useState(() => service?.title ?? "");
+  const [description, setDescription] = useState(() => service?.description ?? "");
   const [duration, setDuration] = useState(() => parseMeta(service?.meta ?? "").duration);
   const [cost, setCost] = useState(() => parseMeta(service?.meta ?? "").costLabel);
-  const [provider, setProvider] = useState("Admin");
+  // const [provider, setProvider] = useState("Admin");
   const [payment, setPayment] = useState<"Stripe" | "PayPal">("Stripe");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -145,6 +150,17 @@ export default function EditServiceModal({ service, onClose, onSaved }: Props) {
                 <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputClass} />
               </div>
 
+              <div className="space-y-2 md:col-span-2">
+                <label className={labelClass}>Description</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className={textareaClass}
+                  rows={4}
+                  placeholder="Optional description for this service category"
+                />
+              </div>
+
               {/* <div className="space-y-2">
                 <label className={labelClass}>Duration</label>
                 <input value={duration} onChange={(e) => setDuration(e.target.value)} className={inputClass} />
@@ -155,12 +171,12 @@ export default function EditServiceModal({ service, onClose, onSaved }: Props) {
                 <input value={cost} onChange={(e) => setCost(e.target.value)} className={inputClass} />
               </div> */}
 
-              <div className="space-y-2 md:col-span-2">
+              {/* <div className="space-y-2 md:col-span-2">
                 <label className={labelClass}>Provider</label>
                 <select value={provider} onChange={(e) => setProvider(e.target.value)} className={inputClass}>
                   <option>Admin</option>
                 </select>
-              </div>
+              </div> */}
             </div>
 
             <div className="mt-1">
@@ -235,6 +251,7 @@ export default function EditServiceModal({ service, onClose, onSaved }: Props) {
                 try {
                   const defaultDurationMinutes = parseDurationMinutes(duration) ?? 60;
                   const basePriceLkr = parseLkrAmount(cost);
+                  const descriptionValue = description.trim();
                   const res = isCreate
                     ? await fetch("/api/v1/admin/services", {
                         method: "POST",
@@ -242,6 +259,7 @@ export default function EditServiceModal({ service, onClose, onSaved }: Props) {
                         headers: { "content-type": "application/json" },
                         body: JSON.stringify({
                           name: title.trim(),
+                          description: descriptionValue || undefined,
                           defaultDurationMinutes,
                           basePriceLkr: basePriceLkr === null ? undefined : basePriceLkr,
                           currency: "LKR",
@@ -254,6 +272,7 @@ export default function EditServiceModal({ service, onClose, onSaved }: Props) {
                         headers: { "content-type": "application/json" },
                         body: JSON.stringify({
                           name: title.trim(),
+                          description: descriptionValue || null,
                           defaultDurationMinutes,
                           basePriceLkr: basePriceLkr === null ? undefined : basePriceLkr,
                           currency: "LKR",

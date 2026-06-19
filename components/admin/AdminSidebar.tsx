@@ -76,15 +76,23 @@ function linkClass(active: boolean, collapsed: boolean) {
   );
 }
 
-function CalendarNavIcon({ size = CALENDAR_NAV_ICON_SIZE }: { size?: number }) {
+function CalendarNavIcon({
+  size = CALENDAR_NAV_ICON_SIZE,
+  active = false,
+}: {
+  size?: number;
+  active?: boolean;
+}) {
   const day = new Date().getDate();
   const fontSize = day >= 10 ? Math.round(size * 0.48) : Math.round(size * 0.55);
 
   return (
     <span
       className={cx(
-        "inline-flex shrink-0 items-center justify-center rounded-md border-2 border-current bg-white font-semibold tabular-nums leading-none",
-        NAV_ICON_CLASS,
+        "inline-flex shrink-0 items-center justify-center rounded-md border-2 font-semibold tabular-nums leading-none transition-colors",
+        active
+          ? "border-mgmt-on-surface bg-mgmt-on-surface text-white"
+          : "border-current bg-white text-mgmt-on-surface",
       )}
       style={{ width: size, height: size, fontSize }}
       aria-hidden
@@ -122,7 +130,7 @@ function CalendarNavGroup({
         className={linkClass(calendarActive, true)}
         title={entry.label}
       >
-        <CalendarNavIcon />
+        <CalendarNavIcon active={calendarActive} />
       </Link>
     );
   }
@@ -140,7 +148,7 @@ function CalendarNavGroup({
           onClick={() => onNavigate?.()}
           className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors"
         >
-          <CalendarNavIcon />
+          <CalendarNavIcon active={calendarActive} />
           <span className={NAV_ITEM_LABEL}>{entry.label}</span>
         </Link>
         <button

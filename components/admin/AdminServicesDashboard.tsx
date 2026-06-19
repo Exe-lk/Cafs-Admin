@@ -7,6 +7,7 @@ type ServiceItem = {
   id: string;
   title: string;
   meta: string;
+  description?: string;
   highlighted?: boolean;
 };
 
@@ -105,6 +106,7 @@ export default function AdminServicesDashboard() {
             id: String(s.service_id),
             title: String(s.name ?? "—"),
             meta: `${mins} mins · ${price}`,
+            description: typeof s.description === "string" ? s.description : "",
             highlighted: Boolean(s.is_active),
           };
         });

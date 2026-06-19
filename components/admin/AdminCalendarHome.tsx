@@ -22,6 +22,7 @@ import {
   isAppointmentStartInPast,
   PAST_APPOINTMENT_MESSAGE,
 } from "@/lib/calendar/scheduling";
+import { isOnlineAppointment, serviceCategoryCalendarStyles } from "@/lib/admin/serviceCategoryColors";
 import {
   isRangeBlocked,
   segmentsInHour,
@@ -159,7 +160,6 @@ function layoutCellEvents(events: CalEvent[]): CalEventLayout[] {
   }));
 }
 
-type CalEventAppearance = "past" | "online" | "in_person" | "rejected";
 
 type CalTimeBlock = {
   id: string;
@@ -232,42 +232,20 @@ function isRejectedCalendarEvent(ev: CalEvent): boolean {
   );
 }
 
-function calendarEventAppearance(ev: CalEvent): CalEventAppearance {
-  if (isRejectedCalendarEvent(ev)) return "rejected";
-  if (isAppointmentStartInPast(ev.startUtc)) return "past";
-  if (ev.appointmentType === "in_person") return "in_person";
-  return "online";
+function calendarEventStyles(ev: CalEvent): {
+  container: string;
+  title: string;
+  subtitle: string;
+} {
+  const base = serviceCategoryCalendarStyles(ev.title, ev.appointmentType);
+  if (isRejectedCalendarEvent(ev)) {
+    return { ...base, container: cx(base.container, "opacity-70") };
+  }
+  if (isAppointmentStartInPast(ev.startUtc)) {
+    return { ...base, container: cx(base.container, "opacity-80") };
+  }
+  return base;
 }
-
-const CAL_EVENT_BLOCK_STYLES: Record<
-  CalEventAppearance,
-  { container: string; title: string; subtitle: string }
-> = {
-  online: {
-    container:
-      "border-l-4 border-[#2d6a4f] bg-[#cbede1] shadow-sm hover:brightness-[0.98]",
-    title: "text-[#1d5c42]",
-    subtitle: "text-[#1d5c42]/80",
-  },
-  in_person: {
-    container:
-      "border-l-4 border-amber-500 bg-amber-100 shadow-sm hover:brightness-[0.98]",
-    title: "text-amber-950",
-    subtitle: "text-amber-900/80",
-  },
-  past: {
-    container:
-      "border-l-4 border-slate-400 bg-slate-100 shadow-sm hover:bg-slate-200/70",
-    title: "text-slate-700",
-    subtitle: "text-slate-500",
-  },
-  rejected: {
-    container:
-      "border-l-4 border-red-500 bg-red-100 shadow-sm hover:bg-red-200/70",
-    title: "text-red-900",
-    subtitle: "text-red-800/80",
-  },
-};
 
 function pad2(n: number) {
   return n < 10 ? `0${n}` : `${n}`;
@@ -631,6 +609,7 @@ export default function AdminCalendarHome({
     <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <CreateAppointmentModal
         open={createOpen}
+        draggable
         onClose={() => {
           setCreateOpen(false);
           setCreateInitialSchedule(null);
@@ -707,6 +686,7 @@ export default function AdminCalendarHome({
           appointment={selected}
           therapistTimezone={timeZone}
           viewFirst
+          draggable
           onClose={() => setEditOpen(false)}
           onDelete={({ sessionId }) => {
             setEvents((prev) => prev.filter((e) => e.id !== sessionId));
@@ -1377,7 +1357,7 @@ function EventBlock({
   column?: number;
   columnCount?: number;
 }) {
-  const styles = CAL_EVENT_BLOCK_STYLES[calendarEventAppearance(ev)];
+  const styles = calendarEventStyles(ev);
   const widthPct = 100 / columnCount;
   const leftPct = column * widthPct;
 
@@ -1401,12 +1381,23 @@ function EventBlock({
       <p className={cx("truncate text-[0.65rem] font-bold leading-tight", styles.title)}>
         {ev.customerName}
       </p>
-      <p className={cx("mt-0.5 truncate text-[0.6rem] leading-tight", styles.subtitle)}>
-        {ev.appointmentTypeLine}
+      <p className={cx("mt-0.5 truncate text-[0.525rem] font-semibold leading-tight", styles.subtitle)}>
+        {ev.title}
       </p>
-      <span className="mt-auto self-end rounded-full bg-white px-1.5 py-0.5 text-[0.55rem] font-semibold leading-none text-mgmt-on-surface shadow-sm">
-        {ev.paymentBadge}
-      </span>
+      <div className="mt-auto flex w-full items-end justify-between gap-1">
+        {isOnlineAppointment(ev.title, ev.appointmentType) ? (
+          <MaterialSymbol
+            name="videocam"
+            size={15}
+            className={cx("shrink-0", styles.title)}
+          />
+        ) : (
+          <span className="shrink-0" aria-hidden />
+        )}
+        <span className="shrink-0 rounded-full bg-white px-1.5 py-0.5 text-[0.55rem] font-semibold leading-none text-mgmt-on-surface shadow-sm">
+          {ev.paymentBadge}
+        </span>
+      </div>
     </button>
   );
 }
