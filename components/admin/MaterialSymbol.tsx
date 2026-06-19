@@ -12,7 +12,8 @@ export default function MaterialSymbol({
   /** Pixel size; also sets the Material Symbols optical size axis for correct scaling. */
   size?: number;
 }) {
-  const opsz = size == null ? 24 : Math.max(20, Math.min(48, Math.round(size)));
+  const px = size == null ? null : Math.round(size);
+  const opsz = px == null ? 24 : Math.min(48, Math.max(12, px));
   return (
     <span
       className={`material-symbols-outlined ${className ?? ""}`.trim()}

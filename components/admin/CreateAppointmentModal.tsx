@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import MaterialSymbol from "@/components/admin/MaterialSymbol";
+import { useDraggableModal } from "@/lib/admin/useDraggableModal";
 import BankSlipUploadFields, {
   hasBankSlipUploadIntent,
   submitBankSlipTransfer,
@@ -103,6 +104,7 @@ export default function CreateAppointmentModal({
   blockedTimeBlocks = [],
   workingHours = [],
   offHoursBookingEnabled = false,
+  draggable = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -112,6 +114,8 @@ export default function CreateAppointmentModal({
   blockedTimeBlocks?: BlockedTimeBlock[];
   workingHours?: WorkingHoursSlot[];
   offHoursBookingEnabled?: boolean;
+  /** When true, the modal can be dragged by its header (e.g. admin calendar). */
+  draggable?: boolean;
   onCreated?: (created: {
     appointmentId: string;
     therapistId: string;
@@ -124,6 +128,10 @@ export default function CreateAppointmentModal({
 }) {
   const titleId = useId();
   const timeZone = normalizeTimeZone(therapistTimezone);
+  const dragResetKey = open
+    ? `${initialSchedule?.date ?? ""}|${initialSchedule?.startTime ?? ""}`
+    : "closed";
+  const drag = useDraggableModal(draggable, dragResetKey);
   const [tab, setTab] = useState<TabKey>("service");
 
   const [services, setServices] = useState<Array<{ serviceId: string; name: string }>>([]);
@@ -472,18 +480,41 @@ export default function CreateAppointmentModal({
         onClick={onClose}
       />
 
-      <div className="relative z-[101] flex min-h-full items-start justify-center p-4 sm:items-center sm:p-6">
+      <div
+        className={cx(
+          "relative z-[101] flex min-h-full items-start justify-center p-4 sm:items-center sm:p-6",
+          drag.wrapperClassName,
+        )}
+      >
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
-          className="flex w-full max-w-[640px] flex-col overflow-hidden rounded-xl bg-white shadow-[0_10px_40px_-10px_rgba(47,51,52,0.15)]"
-          style={{ maxHeight: "calc(100vh - 2rem)" }}
+          className={cx(
+            "flex w-full max-w-[640px] flex-col overflow-hidden rounded-xl bg-white shadow-[0_10px_40px_-10px_rgba(47,51,52,0.15)]",
+            drag.dialogClassName,
+          )}
+          style={{
+            maxHeight: "calc(100vh - 2rem)",
+            transform: drag.dialogTransform,
+          }}
         >
-          <div className="flex items-center justify-between px-6 pt-5 pb-3">
-            <h3 id={titleId} className="text-lg font-semibold text-mgmt-on-surface">
-              Appointment
-            </h3>
+          <div
+            className={cx("flex items-center justify-between px-6 pt-5 pb-3", drag.headerClassName)}
+            {...drag.headerPointerHandlers}
+          >
+            <div className="flex min-w-0 items-center gap-1.5">
+              {draggable ? (
+                <MaterialSymbol
+                  name="drag_indicator"
+                  className="shrink-0 text-mgmt-on-surface-variant"
+                  aria-hidden
+                />
+              ) : null}
+              <h3 id={titleId} className="text-lg font-semibold text-mgmt-on-surface">
+                Appointment
+              </h3>
+            </div>
             <button
               type="button"
               onClick={onClose}

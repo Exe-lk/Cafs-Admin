@@ -65,7 +65,7 @@ export default function ServicesSubNav() {
                     : "text-mgmt-on-surface",
               )}
             >
-              <span>All services ({totalServiceCount})</span>
+              <span>Services ({totalServiceCount})</span>
               {onClasses && (
                 <svg
                   className="h-4 w-4 shrink-0"
