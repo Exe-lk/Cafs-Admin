@@ -8,10 +8,13 @@ import EditServiceModal, { type EditServiceModalService } from "@/components/adm
 import EditTherapistServiceModal, {
   type EditTherapistServiceModalItem,
 } from "@/components/admin/EditTherapistServiceModal";
+import EditTherapistClassModal from "@/components/admin/EditTherapistClassModal";
+import AddServiceOrClassMenu from "@/components/admin/AddServiceOrClassMenu";
 import ListItemActionsMenu from "@/components/admin/ListItemActionsMenu";
 import { useAdminServiceCategories } from "@/components/admin/useAdminServiceCategories";
 import { notifyServiceCategoriesReload } from "@/components/admin/serviceCategories";
 import { formatApiErrorMessage } from "@/lib/api/formatApiError";
+import { serviceCategoryAccentBorderClass } from "@/lib/admin/serviceCategoryColors";
 
 type ServiceItem = EditTherapistServiceModalItem & {
   highlighted?: boolean;
@@ -19,6 +22,7 @@ type ServiceItem = EditTherapistServiceModalItem & {
 };
 
 type ServiceModalState = "closed" | "create" | ServiceItem;
+type ClassModalState = "closed" | "create";
 
 function formatPriceLkr(value: unknown): string {
   if (value == null || value === "") return "—";
@@ -130,6 +134,7 @@ function mapServiceTypeToModalItem(row: Record<string, unknown>): EditServiceMod
     id: String(row.service_id ?? ""),
     title: String(row.name ?? "—"),
     meta: formatServiceTypeMeta(row),
+    description: typeof row.description === "string" ? row.description : "",
   };
 }
 
@@ -150,7 +155,9 @@ export default function AdminServicesHome() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [pageLinkCopied, setPageLinkCopied] = useState(false);
   const [serviceModal, setServiceModal] = useState<ServiceModalState>("closed");
+  const [classModal, setClassModal] = useState<ClassModalState>("closed");
   const [services, setServices] = useState<ServiceItem[]>([]);
+  const [allTherapists, setAllTherapists] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [actionsMenuId, setActionsMenuId] = useState<string | null>(null);
@@ -242,12 +249,17 @@ export default function AdminServicesHome() {
         setServiceTypeCatalog(nextServiceTypeCatalog);
 
         const therapistNameById = new Map<string, string>();
+        const nextTherapists: Array<{ id: string; name: string }> = [];
         for (const row of therapistsJson.data?.items ?? []) {
           const id = String(row.therapist_id ?? "");
           if (!id) continue;
           const profiles = row.profiles as { full_name?: string | null } | null | undefined;
-          therapistNameById.set(id, String(profiles?.full_name ?? "—").trim() || "—");
+          const name = String(profiles?.full_name ?? "—").trim() || "—";
+          therapistNameById.set(id, name);
+          nextTherapists.push({ id, name });
         }
+        nextTherapists.sort((a, b) => a.name.localeCompare(b.name));
+        setAllTherapists(nextTherapists);
 
         const next: ServiceItem[] = (therapistServicesJson.data.items ?? []).map((row) => {
           const serviceId = String(row.service_id ?? "");
@@ -280,6 +292,7 @@ export default function AdminServicesHome() {
         if ((e as { name?: string })?.name === "AbortError") return;
         setErrorMsg(e instanceof Error ? e.message : "Failed to load services");
         setServices([]);
+        setAllTherapists([]);
       } finally {
         setLoading(false);
       }
@@ -312,13 +325,7 @@ export default function AdminServicesHome() {
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [categoryMenuOpen]);
 
-  const therapistOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const service of services) {
-      if (service.therapistId) map.set(service.therapistId, service.therapistName);
-    }
-    return Array.from(map, ([id, name]) => ({ id, name }));
-  }, [services]);
+  const therapistOptions = allTherapists;
 
   const selectedTherapist = useMemo(
     () => therapistOptions.find((t) => t.id === therapistFilter) ?? null,
@@ -395,6 +402,17 @@ export default function AdminServicesHome() {
           onSaved={() => {
             setServiceModal("closed");
             reload();
+          }}
+        />
+      ) : null}
+
+      {classModal === "create" ? (
+        <EditTherapistClassModal
+          key="new-therapist-class-from-services"
+          classItem={null}
+          onClose={() => setClassModal("closed")}
+          onSaved={() => {
+            setClassModal("closed");
           }}
         />
       ) : null}
@@ -524,16 +542,10 @@ export default function AdminServicesHome() {
               ) : null}
             </div>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setServiceModal("create")}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-mgmt-on-surface text-mgmt-surface-container-lowest shadow-md transition-transform hover:bg-mgmt-on-background active:scale-95"
-            aria-label="Add service"
-          >
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
+          <AddServiceOrClassMenu
+            onAddService={() => setServiceModal("create")}
+            onAddClass={() => setClassModal("create")}
+          />
         </div>
       </header>
 
@@ -679,7 +691,13 @@ export default function AdminServicesHome() {
             className="group relative flex items-center justify-between rounded-lg border border-mgmt-outline-variant bg-mgmt-surface-container-lowest p-4 shadow-sm transition-colors hover:border-mgmt-on-surface-variant"
             data-purpose="service-list-item"
           >
-            <div className="absolute inset-y-0 left-0 w-1 rounded-l-lg bg-red-500" aria-hidden />
+            <div
+              className={cx(
+                "absolute inset-y-0 left-0 w-1 rounded-l-lg",
+                serviceCategoryAccentBorderClass(service.title),
+              )}
+              aria-hidden
+            />
             <button
               type="button"
               onClick={() => setServiceModal(service)}

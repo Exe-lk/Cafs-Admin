@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState } from "react";
+import { useDraggableModal } from "@/lib/admin/useDraggableModal";
 import AppointmentHistoryPanel from "@/components/admin/AppointmentHistoryPanel";
 import BankSlipUploadFields, {
   hasBankSlipUploadIntent,
@@ -92,6 +93,7 @@ export default function EditAppointmentModal({
   therapistTimezone,
   readOnly = false,
   viewFirst = false,
+  draggable = false,
   onClose,
   onSave,
   onDelete,
@@ -102,6 +104,8 @@ export default function EditAppointmentModal({
   readOnly?: boolean;
   /** When true, modal opens read-only with "Appointment" heading; pen icon switches to edit. */
   viewFirst?: boolean;
+  /** When true, the modal can be dragged by its header (e.g. admin calendar). */
+  draggable?: boolean;
   onClose: () => void;
   onSave: (next: AdminEditableAppointment) => void;
   onDelete: (args: { dayId: string; sessionId: string }) => void;
@@ -117,6 +121,7 @@ export default function EditAppointmentModal({
   const timeZone = normalizeTimeZone(therapistTimezone);
   const [draft, setDraft] = useState<AdminEditableAppointment>(appointment);
   const [isEditing, setIsEditing] = useState(() => !readOnly && !viewFirst);
+  const drag = useDraggableModal(draggable, appointment.sessionId);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
@@ -346,18 +351,41 @@ export default function EditAppointmentModal({
         onClick={onClose}
       />
 
-      <div className="relative z-[101] flex min-h-full items-start justify-center p-4 sm:items-center sm:p-6">
+      <div
+        className={cx(
+          "relative z-[101] flex min-h-full items-start justify-center p-4 sm:items-center sm:p-6",
+          drag.wrapperClassName,
+        )}
+      >
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
-          className="flex w-full max-w-[520px] flex-col overflow-hidden rounded-xl bg-white shadow-[0_10px_40px_-10px_rgba(47,51,52,0.15)]"
-          style={{ maxHeight: "calc(100vh - 2rem)" }}
+          className={cx(
+            "flex w-full max-w-[520px] flex-col overflow-hidden rounded-xl bg-white shadow-[0_10px_40px_-10px_rgba(47,51,52,0.15)]",
+            drag.dialogClassName,
+          )}
+          style={{
+            maxHeight: "calc(100vh - 2rem)",
+            transform: drag.dialogTransform,
+          }}
         >
-          <div className="flex items-center justify-between px-6 pt-5 pb-3">
-            <h3 id={titleId} className="text-lg font-semibold text-mgmt-on-surface">
-              {isEditing ? "Edit appointment" : "Appointment"}
-            </h3>
+          <div
+            className={cx("flex items-center justify-between px-6 pt-5 pb-3", drag.headerClassName)}
+            {...drag.headerPointerHandlers}
+          >
+            <div className="flex min-w-0 items-center gap-1.5">
+              {draggable ? (
+                <MaterialSymbol
+                  name="drag_indicator"
+                  className="shrink-0 text-mgmt-on-surface-variant display-none"
+                  aria-hidden
+                />
+              ) : null}
+              <h3 id={titleId} className="text-lg font-semibold text-mgmt-on-surface">
+                {isEditing ? "Edit appointment" : "Appointment"}
+              </h3>
+            </div>
             <button
               type="button"
               onClick={onClose}

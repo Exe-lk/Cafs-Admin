@@ -5,6 +5,8 @@ import ConfirmationModal from "@/components/admin/ConfirmationModal";
 import EditTherapistClassModal, {
   type EditTherapistClassModalItem,
 } from "@/components/admin/EditTherapistClassModal";
+import EditTherapistServiceModal from "@/components/admin/EditTherapistServiceModal";
+import AddServiceOrClassMenu from "@/components/admin/AddServiceOrClassMenu";
 import ListItemActionsMenu from "@/components/admin/ListItemActionsMenu";
 import { useAdminTherapists } from "@/components/admin/useAdminTherapists";
 
@@ -12,6 +14,7 @@ type ClassItem = EditTherapistClassModalItem & {
   isActive: boolean;
 };
 type ClassModalState = "closed" | "create" | ClassItem;
+type ServiceModalState = "closed" | "create";
 
 function SearchIcon({ className }: { className?: string }) {
   return (
@@ -61,6 +64,7 @@ export default function AdminClassesHome() {
   const [search, setSearch] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [classModal, setClassModal] = useState<ClassModalState>("closed");
+  const [serviceModal, setServiceModal] = useState<ServiceModalState>("closed");
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -185,6 +189,17 @@ export default function AdminClassesHome() {
         />
       ) : null}
 
+      {serviceModal === "create" ? (
+        <EditTherapistServiceModal
+          key="new-therapist-service-from-classes"
+          service={null}
+          onClose={() => setServiceModal("closed")}
+          onSaved={() => {
+            setServiceModal("closed");
+          }}
+        />
+      ) : null}
+
       {deleteTarget ? (
         <ConfirmationModal
           title="Delete class"
@@ -210,16 +225,10 @@ export default function AdminClassesHome() {
       <header className="sticky top-12 z-10 flex shrink-0 items-center justify-between gap-3 bg-mgmt-surface-container-lowest px-4 py-5 sm:top-0 sm:px-6 lg:px-8 lg:py-6">
         <h1 className="min-w-0 truncate text-xl font-bold text-mgmt-on-surface sm:text-2xl">Classes</h1>
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            onClick={() => setClassModal("create")}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-mgmt-on-surface text-mgmt-surface-container-lowest shadow-md transition-transform hover:bg-mgmt-on-background active:scale-95"
-            aria-label="Add class"
-          >
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
+          <AddServiceOrClassMenu
+            onAddService={() => setServiceModal("create")}
+            onAddClass={() => setClassModal("create")}
+          />
         </div>
       </header>
 
