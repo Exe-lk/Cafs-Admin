@@ -19,6 +19,7 @@ type AppointmentRow = {
   end_at: string;
   appointment_type: "online" | "in_person";
   status: string;
+  meet_link?: string | null;
   client:
     | { full_name?: string | null }
     | Array<{ full_name?: string | null }>
@@ -78,6 +79,7 @@ export async function GET(request: NextRequest) {
       end_at,
       appointment_type,
       status,
+      meet_link,
       payments(method, status, paid_at, provider_payload),
       client:profiles!appointments_client_id_fkey(user_id, full_name),
       service:services!appointments_service_id_fkey(service_id, name)
@@ -119,6 +121,7 @@ export async function GET(request: NextRequest) {
         appointmentTypeLine,
         paymentBadge,
         proofUrl,
+        meetLink: str(a.meet_link).trim() || null,
       };
     }),
   );

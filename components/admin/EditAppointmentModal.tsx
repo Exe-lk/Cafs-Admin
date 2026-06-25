@@ -572,16 +572,26 @@ export default function EditAppointmentModal({
 
               <div className="sm:col-span-2">
                 <label className="block text-[11px] font-semibold text-mgmt-on-surface-variant">
-                  Video link (optional)
+                  {draft.appointmentType === "online" ? "Google Meet link" : "Video link (optional)"}
                 </label>
                 <input
                   value={draft.videoLink ?? ""}
-                  readOnly={effectiveReadOnly}
-                  disabled={effectiveReadOnly}
+                  readOnly={
+                    effectiveReadOnly ||
+                    (draft.appointmentType === "online" && Boolean(draft.videoLink?.trim()))
+                  }
+                  disabled={
+                    effectiveReadOnly ||
+                    (draft.appointmentType === "online" && Boolean(draft.videoLink?.trim()))
+                  }
                   maxLength={MAX_VIDEO_LINK_LEN}
                   onChange={(e) => setDraft((p) => ({ ...p, videoLink: e.target.value }))}
                   className="mt-1 w-full rounded-lg bg-mgmt-surface-container-low px-3 py-2 text-sm text-mgmt-on-surface outline-none ring-1 ring-transparent focus:ring-mgmt-primary/30 disabled:cursor-default disabled:opacity-90"
-                  placeholder="Paste meeting URL…"
+                  placeholder={
+                    draft.appointmentType === "online"
+                      ? "Meet link is created when the appointment is booked"
+                      : "Paste meeting URL…"
+                  }
                 />
               </div>
 

@@ -16,6 +16,9 @@ import {
   getPaymentInstructionsFromEnv,
   sendAppointmentPendingPaymentEmail,
 } from "@/lib/email/appointment-pending-payment";
+import { createGoogleCalendarForAppointment } from "@/lib/booking/create-google-calendar-for-appointment";
+import { deleteEvent } from "@/lib/google/calendarService";
+import { getRefreshByID, GetAccessoken } from "@/lib/google/therapistGoogleTokens";
 import { normalizeTimeZone } from "@/lib/timezone";
 
 type Body = {
@@ -119,6 +122,29 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const { data: conflicts } = await adminSupabase
+    .from("appointments")
+    .select("appointment_id")
+    .eq("therapist_id", therapistId)
+    .not("status", "in", "(cancelled,expired)")
+    .lt("start_at", endD.toISOString())
+    .gt("end_at", startD.toISOString())
+    .limit(1);
+  if (conflicts?.length) {
+    return err("Selected time slot is no longer available.", 409);
+  }
+
+  const calendarResult = await createGoogleCalendarForAppointment(adminSupabase, {
+    therapistId,
+    clientId,
+    appointmentType,
+    startUtc: startD,
+    endUtc: endD,
+  });
+  if (!calendarResult.ok) {
+    return err(calendarResult.message, calendarResult.status);
+  }
+
   const deadlineHours = Number(process.env.PAYMENT_DEADLINE_HOURS ?? "24");
   const paymentDueAt = new Date(
     startD.getTime() + deadlineHours * 60 * 60 * 1000,
@@ -137,11 +163,28 @@ export async function POST(request: NextRequest) {
     start_at: startD.toISOString(),
     end_at: endD.toISOString(),
     payment_due_at: paymentDueAt,
+    meet_link: calendarResult.meetLink,
+    google_calendar_event_id: calendarResult.googleCalendarEventId,
     created_by: auth.ctx.user.id,
     created_at: now,
     updated_at: now,
   });
-  if (error) return err(error.message, 400);
+  if (error) {
+    try {
+      const refreshToken = await getRefreshByID(therapistId);
+      const accessToken = refreshToken ? (await GetAccessoken(therapistId)) || "" : "";
+      if (refreshToken && accessToken) {
+        await deleteEvent({
+          accessToken,
+          refreshToken,
+          eventId: calendarResult.googleCalendarEventId,
+        });
+      }
+    } catch (cleanupError) {
+      console.error("[create appointment] calendar cleanup failed", cleanupError);
+    }
+    return err(error.message, 400);
+  }
 
   const [
     { data: clientProfile },
@@ -293,6 +336,9 @@ export async function POST(request: NextRequest) {
     {
       appointmentId,
       status: "pending_payment" as const,
+      appointmentType,
+      meetLink: calendarResult.meetLink,
+      googleCalendarEventId: calendarResult.googleCalendarEventId,
       emailSent,
       ...(emailError ? { emailError } : {}),
     },

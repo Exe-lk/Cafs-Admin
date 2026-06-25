@@ -122,6 +122,7 @@ type CalEvent = {
   appointmentType: "online" | "in_person";
   durationMin?: number;
   proofUrl?: string;
+  meetLink?: string;
   approvalStatus?: "pending" | "accepted" | "rejected";
   appointmentStatus?:
     | "pending_payment"
@@ -405,6 +406,7 @@ export default function AdminCalendarHome({
         appointmentTypeLine: string;
         paymentBadge: CalendarPaymentBadge;
         proofUrl?: string | null;
+        meetLink?: string | null;
       }>;
       timeBlocks?: Array<{
         timeBlockId: string;
@@ -468,6 +470,7 @@ export default function AdminCalendarHome({
               paymentBadge: it.paymentBadge,
               appointmentType: it.appointmentType,
               proofUrl: it.proofUrl ?? undefined,
+              meetLink: it.meetLink ?? undefined,
               approvalStatus: approvalStatusForAppointmentStatus(it.status),
               appointmentStatus: it.status as CalEvent["appointmentStatus"],
             });
@@ -716,6 +719,7 @@ export default function AdminCalendarHome({
                   therapistId: next.therapistId ?? e.therapistId,
                   therapistName: next.therapistName ?? e.therapistName,
                   proofUrl: next.proofUrl,
+                  meetLink: next.videoLink ?? e.meetLink,
                   approvalStatus: next.approvalStatus,
                   appointmentStatus: next.appointmentStatus,
                 };
@@ -1171,7 +1175,7 @@ export default function AdminCalendarHome({
                           therapistId: ev.therapistId,
                           therapistName: ev.therapistName,
                           notes: "",
-                          videoLink: "",
+                          videoLink: ev.meetLink ?? "",
                           proofUrl: ev.proofUrl,
                           approvalStatus: ev.approvalStatus ?? "pending",
                           appointmentStatus: ev.appointmentStatus,
